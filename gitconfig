@@ -1,0 +1,7 @@
+[user]
+	name = John Jacoby
+	email = jrdjacoby@gmail.com
+[push]
+	default = matching
+[safe]
+	directory = /n/groups/datta/sherry/moseq2-app
