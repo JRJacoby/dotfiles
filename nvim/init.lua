@@ -18,6 +18,10 @@ vim.opt.rtp:prepend(lazypath)
 -- Make 'y' (yank) and 'p' (paste) use the system clipboard
 vim.opt.clipboard = 'unnamedplus'
 
+-- Enable relative line numbers (with absolute number on current line)
+vim.opt.number = true
+vim.opt.relativenumber = true
+
 -- This is where you list your plugins
 require("lazy").setup({
   
@@ -32,7 +36,7 @@ require("lazy").setup({
         
         -- A list of parser names, or "all"
         -- We're installing markdown, lua (for this config), and vimdoc (for help files)
-        ensure_installed = { "markdown", "markdown_inline", "lua", "vimdoc" },
+        ensure_installed = { "markdown", "markdown_inline", "lua", "vimdoc", "python" },
 
         -- Install parsers synchronously (blocks startup)
         sync_install = false,
@@ -56,8 +60,12 @@ require("lazy").setup({
     tag = '0.1.6', -- Pinning to a recent stable tag
     dependencies = { 'nvim-lua/plenary.nvim' },
     config = function()
-      -- This config function runs after the plugin loads
-      -- We also load the 'project' extension here
+      require('telescope').setup({
+        defaults = {
+          hidden = true,
+          file_ignore_patterns = { ".git/" },
+        },
+      })
       require('telescope').load_extension('project')
     end
   },
@@ -80,6 +88,51 @@ require("lazy").setup({
     config = function()
       -- You can add neo-tree setup options here in the future
       -- For now, it will just load with default settings
+    end
+  },
+
+  -- PLUGIN 5: oil.nvim (File Explorer as Buffer)
+  {
+    "stevearc/oil.nvim",
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    config = function()
+      require("oil").setup()
+    end
+  },
+
+  -- PLUGIN 6: nvim-lspconfig (provides server configs for vim.lsp)
+  {
+    "neovim/nvim-lspconfig",
+    config = function()
+      -- Set up keymaps when an LSP attaches to a buffer
+      vim.api.nvim_create_autocmd("LspAttach", {
+        callback = function(args)
+          local opts = { buffer = args.buf }
+          vim.keymap.set("n", "gd", vim.lsp.buf.definition, opts)
+          vim.keymap.set("n", "gD", vim.lsp.buf.declaration, opts)
+          vim.keymap.set("n", "gr", vim.lsp.buf.references, opts)
+          vim.keymap.set("n", "gi", vim.lsp.buf.implementation, opts)
+          vim.keymap.set("n", "K", vim.lsp.buf.hover, opts)
+          vim.keymap.set("n", "<leader>rn", vim.lsp.buf.rename, opts)
+          vim.keymap.set("n", "<leader>ca", vim.lsp.buf.code_action, opts)
+        end,
+      })
+
+      -- Python (pyright) - using new vim.lsp API
+      vim.lsp.config('pyright', {})
+      vim.lsp.enable('pyright')
+    end
+  },
+
+  -- PLUGIN 8: onedark.nvim (Colorscheme)
+  {
+    "navarasu/onedark.nvim",
+    priority = 1000, -- Load before other plugins
+    config = function()
+      require("onedark").setup({
+        style = "dark", -- Options: dark, darker, cool, deep, warm, warmer
+      })
+      require("onedark").load()
     end
   },
 
@@ -112,5 +165,47 @@ keymap("n", "<leader>fb", "<cmd>Telescope buffers<cr>", { desc = "Find Open Buff
 
 -- Keymap for Telescope Project (Multi-Root Workspace)
 keymap("n", "<leader>fp", "<cmd>Telescope project<cr>", { desc = "Find Projects" })
+
+-- More Telescope keymaps
+keymap("n", "<leader>fh", "<cmd>Telescope help_tags<cr>", { desc = "Find Help" })
+keymap("n", "<leader>fo", "<cmd>Telescope oldfiles<cr>", { desc = "Find Recent Files" })
+keymap("n", "<leader>fw", "<cmd>Telescope grep_string<cr>", { desc = "Find Word Under Cursor" })
+keymap("n", "<leader>fd", "<cmd>Telescope diagnostics<cr>", { desc = "Find Diagnostics" })
+keymap("n", "<leader>fr", "<cmd>Telescope resume<cr>", { desc = "Resume Last Search" })
+keymap("n", "<leader>fk", "<cmd>Telescope keymaps<cr>", { desc = "Find Keymaps" })
+keymap("n", "<leader>/", "<cmd>Telescope current_buffer_fuzzy_find<cr>", { desc = "Fuzzy Find in Buffer" })
+
+-- Keymap for Oil (File Explorer as Buffer)
+keymap("n", "-", "<cmd>Oil<cr>", { desc = "Open Parent Directory" })
+
+-- Diagnostic keymaps
+keymap("n", "gl", vim.diagnostic.open_float, { desc = "Show Diagnostic Details" })
+keymap("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous Diagnostic" })
+keymap("n", "]d", vim.diagnostic.goto_next, { desc = "Next Diagnostic" })
+
+-- Window navigation (works in normal and terminal mode)
+keymap("n", "<C-h>", "<C-w>h", { desc = "Move to Left Window" })
+keymap("n", "<C-j>", "<C-w>j", { desc = "Move to Lower Window" })
+keymap("n", "<C-k>", "<C-w>k", { desc = "Move to Upper Window" })
+keymap("n", "<C-l>", "<C-w>l", { desc = "Move to Right Window" })
+
+-- Terminal keymaps
+keymap("n", "<leader>th", "<cmd>split | terminal<cr>", { desc = "Terminal (horizontal split)" })
+keymap("n", "<leader>tv", "<cmd>vsplit | terminal<cr>", { desc = "Terminal (vertical split)" })
+keymap("n", "<leader>tt", "<cmd>terminal<cr>", { desc = "Terminal (current window)" })
+
+-- Auto-enter terminal mode when switching to a terminal buffer
+vim.api.nvim_create_autocmd({"BufEnter", "WinEnter"}, {
+  callback = function()
+    if vim.bo.buftype == "terminal" then
+      vim.cmd("startinsert")
+    end
+  end
+})
+keymap("t", "<Esc><Esc>", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
+keymap("t", "<C-h>", [[<C-\><C-n><C-w>h]], { desc = "Move to Left Window" })
+keymap("t", "<C-j>", [[<C-\><C-n><C-w>j]], { desc = "Move to Lower Window" })
+keymap("t", "<C-k>", [[<C-\><C-n><C-w>k]], { desc = "Move to Upper Window" })
+keymap("t", "<C-l>", [[<C-\><C-n><C-w>l]], { desc = "Move to Right Window" })
 
 -- == KEYMAPS END HERE ==

@@ -7,6 +7,7 @@ fi
 
 # User specific aliases and functions
 alias ..='cd ..'
+alias nv='nvim'
 
 # --- HISTORY CONFIGURATION ---
 
@@ -110,3 +111,4 @@ export SDKMAN_DIR="$HOME/.sdkman"
 
 # Source machine-specific config if it exists
 [[ -f ~/.bashrc.local ]] && source ~/.bashrc.local
+. "$HOME/.cargo/env"
