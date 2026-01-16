@@ -136,6 +136,12 @@ require("lazy").setup({
     end
   },
 
+  -- PLUGIN 9: vim-zoom (Toggle zoom on a window)
+  {
+    "dhruvasagar/vim-zoom",
+    keys = { { "<C-w>m", "<Plug>(zoom-toggle)", desc = "Toggle Zoom" } },
+  },
+
   -- == ADDED PLUGINS END HERE ==
 
   -- Add more plugins here in the future
@@ -203,9 +209,26 @@ vim.api.nvim_create_autocmd({"BufEnter", "WinEnter"}, {
   end
 })
 keymap("t", "<Esc><Esc>", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
-keymap("t", "<C-h>", [[<C-\><C-n><C-w>h]], { desc = "Move to Left Window" })
-keymap("t", "<C-j>", [[<C-\><C-n><C-w>j]], { desc = "Move to Lower Window" })
-keymap("t", "<C-k>", [[<C-\><C-n><C-w>k]], { desc = "Move to Upper Window" })
-keymap("t", "<C-l>", [[<C-\><C-n><C-w>l]], { desc = "Move to Right Window" })
+keymap("t", "<C-\\>", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
+keymap("t", "<C-w>h", [[<C-\><C-n><C-w>h]], { desc = "Move to Left Window" })
+keymap("t", "<C-w>j", [[<C-\><C-n><C-w>j]], { desc = "Move to Lower Window" })
+keymap("t", "<C-w>k", [[<C-\><C-n><C-w>k]], { desc = "Move to Upper Window" })
+keymap("t", "<C-w>l", [[<C-\><C-n><C-w>l]], { desc = "Move to Right Window" })
+
+-- Broadcast command to all terminal windows in current tab
+vim.api.nvim_create_user_command("Bc", function(opts)
+  local cmd = opts.args
+  local current_win = vim.api.nvim_get_current_win()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    if vim.bo[buf].buftype == "terminal" then
+      local job_id = vim.b[buf].terminal_job_id
+      if job_id then
+        vim.fn.chansend(job_id, cmd .. "\r")
+      end
+    end
+  end
+  vim.api.nvim_set_current_win(current_win)
+end, { nargs = 1, desc = "Broadcast command to all terminals in tab" })
 
 -- == KEYMAPS END HERE ==

@@ -53,6 +53,11 @@ function g() {
 }
 
 function dt() {
+	# Check login status first; if expired/invalid, login
+	if ! devtunnel user show &>/dev/null; then
+		echo "Login required. Logging in..."
+		devtunnel user login
+	fi
 	devtunnel host -p "$1" --allow-anonymous
 }
 
