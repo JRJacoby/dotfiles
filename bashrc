@@ -42,6 +42,8 @@ export VSCODE_SERVER_DIR=$HOME/.vscode-server
 export PATH=$HOME/bin:$PATH
 export PATH=$PATH:$HOME/local/go/bin
 export PATH=$PATH:$HOME/go/bin
+export PATH=$HOME/.local/nvim/bin:$PATH
+export PATH=$HOME/gopath/bin:$PATH
 
 export UV_INDEX_STRATEGY=first-index
 
