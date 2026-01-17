@@ -60,6 +60,25 @@ function dt() {
 	devtunnel host -p "$1" --allow-anonymous
 }
 
+function claude() {
+	local args=()
+	local skip_permissions=true
+
+	for arg in "$@"; do
+		if [[ "$arg" == "--dont-skip-permissions" ]]; then
+			skip_permissions=false
+		else
+			args+=("$arg")
+		fi
+	done
+
+	if $skip_permissions; then
+		command claude --dangerously-skip-permissions "${args[@]}"
+	else
+		command claude "${args[@]}"
+	fi
+}
+
 # Cursor/VSCode: disable conda prompt modifications for clean agent prompts
 if [[ ${TERM_PROGRAM:-} == "vscode" || ${TERM_PROGRAM:-} == "cursor" ]]; then
   export CONDA_CHANGEPS1=no
