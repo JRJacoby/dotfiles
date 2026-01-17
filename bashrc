@@ -28,16 +28,13 @@ export HISTCONTROL=ignoredups:erasedups
 # We append to the existing PROMPT_COMMAND so we don't break other settings.
 export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
 
-# Locale
-export LANGUAGE=UTF-8
-export LC_ALL=en_US.UTF-8
-export LANG=en_US.UTF-8
-export LC_CTYPE=en_US.UTF-8
-export LC_COLLATE=$LANG
-export LC_MESSAGES=$LANG
-export LC_MONETARY=$LANG
-export LC_NUMERIC=$LANG
-export LC_TIME=$LANG
+# Locale - use en_US.UTF-8 if available, otherwise fall back to C.UTF-8
+if locale -a 2>/dev/null | grep -q "en_US.utf8"; then
+    export LANG=en_US.UTF-8
+elif locale -a 2>/dev/null | grep -q "C.utf8\|C.UTF-8"; then
+    export LANG=C.UTF-8
+fi
+export LC_ALL=$LANG
 
 export VSCODE_SERVER_DIR=$HOME/.vscode-server
 
