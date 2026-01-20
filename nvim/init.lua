@@ -24,7 +24,7 @@ vim.opt.relativenumber = true
 
 -- This is where you list your plugins
 require("lazy").setup({
-  
+
   -- YOUR FIRST PLUGIN: nvim-treesitter
   -- This provides fast and accurate syntax highlighting
   {
@@ -33,7 +33,7 @@ require("lazy").setup({
     config = function()
       -- This config function runs after the plugin loads
       require("nvim-treesitter.configs").setup({
-        
+
         -- A list of parser names, or "all"
         -- We're installing markdown, lua (for this config), and vimdoc (for help files)
         ensure_installed = { "markdown", "markdown_inline", "lua", "vimdoc", "python" },
@@ -62,8 +62,12 @@ require("lazy").setup({
     config = function()
       require('telescope').setup({
         defaults = {
-          hidden = true,
           file_ignore_patterns = { ".git/" },
+        },
+        pickers = {
+          find_files = {
+            hidden = true,
+          },
         },
       })
       require('telescope').load_extension('project')
@@ -86,8 +90,15 @@ require("lazy").setup({
       "MunifTanjim/nui.nvim",
     },
     config = function()
-      -- You can add neo-tree setup options here in the future
-      -- For now, it will just load with default settings
+      require("neo-tree").setup({
+        filesystem = {
+          filtered_items = {
+            visible = true,
+            hide_dotfiles = false,
+            hide_gitignored = false,
+          },
+        },
+      })
     end
   },
 
@@ -96,7 +107,11 @@ require("lazy").setup({
     "stevearc/oil.nvim",
     dependencies = { "nvim-tree/nvim-web-devicons" },
     config = function()
-      require("oil").setup()
+      require("oil").setup({
+        view_options = {
+          show_hidden = true,
+        },
+      })
     end
   },
 

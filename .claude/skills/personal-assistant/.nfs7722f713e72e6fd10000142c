@@ -1,0 +1,16 @@
+---
+name: personal-assistant
+description: Preferences for using the personal-assistant MCP server (Google Calendar).
+---
+
+# Personal Assistant
+
+## Timezone
+
+All conversations should assume Eastern time (America/New_York, UTC-5/UTC-4 depending on DST).
+
+## Calendar Searches
+
+When searching for events for a full day, use the full day in Eastern time:
+- Start: 12:01 AM Eastern (`00:01:00-05:00` or `-04:00` during DST)
+- End: 11:59 PM Eastern (`23:59:00-05:00` or `-04:00` during DST)
