@@ -71,6 +71,7 @@ require("lazy").setup({
         },
       })
       require('telescope').load_extension('project')
+      require('telescope').load_extension('session-lens')
     end
   },
 
@@ -157,6 +158,17 @@ require("lazy").setup({
     keys = { { "<C-w>m", "<Plug>(zoom-toggle)", desc = "Toggle Zoom" } },
   },
 
+  -- PLUGIN 10: auto-session (Per-directory session management)
+  {
+    "rmagatti/auto-session",
+    lazy = false,
+    config = function()
+      require("auto-session").setup({
+        suppressed_dirs = { "~/", "~/Downloads", "/" },
+      })
+    end
+  },
+
   -- == ADDED PLUGINS END HERE ==
 
   -- Add more plugins here in the future
@@ -186,6 +198,9 @@ keymap("n", "<leader>fb", "<cmd>Telescope buffers<cr>", { desc = "Find Open Buff
 
 -- Keymap for Telescope Project (Multi-Root Workspace)
 keymap("n", "<leader>fp", "<cmd>Telescope project<cr>", { desc = "Find Projects" })
+
+-- Keymap for Telescope Sessions (auto-session)
+keymap("n", "<leader>fs", "<cmd>Telescope session-lens<cr>", { desc = "Find Sessions" })
 
 -- More Telescope keymaps
 keymap("n", "<leader>fh", "<cmd>Telescope help_tags<cr>", { desc = "Find Help" })
