@@ -8,6 +8,7 @@ fi
 # User specific aliases and functions
 alias ..='cd ..'
 alias nv='nvim'
+alias ta='tmux attach'
 
 # --- HISTORY CONFIGURATION ---
 
@@ -27,6 +28,10 @@ export HISTCONTROL=ignoredups:erasedups
 # This ensures that if your SSH session disconnects, you don't lose your history.
 # We append to the existing PROMPT_COMMAND so we don't break other settings.
 export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
+
+# 5. Vim-style history navigation (Ctrl+K = up, Ctrl+J = down)
+bind '"\C-k": previous-history'
+bind '"\C-j": next-history'
 
 # Locale - use en_US.UTF-8 if available, otherwise fall back to C.UTF-8
 if locale -a 2>/dev/null | grep -q "en_US.utf8"; then
@@ -77,6 +82,59 @@ function claude() {
 	else
 		command claude "${args[@]}"
 	fi
+}
+
+function cr() {
+    # Replace both '/' and '_' with '-'
+    local project_path="$HOME/.claude/projects/$(pwd | tr '/_' '-')"
+    
+    if [[ ! -d "$project_path" ]]; then
+        echo "Error: Claude project directory not found:"
+        echo "$project_path"
+        return 1
+    fi
+
+    ls -lst "$project_path" | \
+    tail -n +2 | \
+    fzf --header="Select conversation to resume" | \
+    awk '{print $NF}' | \
+    sed -E 's/\.jsonl?$//' | \
+    xargs -r -I {} claude --dangerously-skip-permissions -r {}
+}
+
+function wp() {
+    # Get the absolute path of the argument (or current dir if empty)
+    local target_path=$(readlink -f "${1:-.}/")
+
+    # 1. Swap the O2 prefix for the WSL/sshfs prefix
+    # 2. Convert all forward slashes to backslashes
+    echo "$target_path" | \
+    sed 's|^/n/groups/datta|\\\\wsl.localhost\\wsl-d\\home\\jrdja\\o2_mnt|' | \
+    sed 's|/|\\|g'
+}
+
+function nav() {
+    while true; do
+        local sel=$(ls -a | fzf --preview 'if [ -d {} ]; then ls -la {}; else head -100 {}; fi')
+        [[ -z "$sel" ]] && return  # cancelled with Esc
+        if [[ -d "$sel" ]]; then
+            cd "$sel"
+        elif [[ -f "$sel" ]]; then
+            nvim "$sel"
+            return
+        fi
+    done
+}
+
+# quickdir - terminal directory browser
+b() {
+    export QUICKDIR_LASTDIR=$(mktemp)
+    quickdir "$@"
+    if [ -f "$QUICKDIR_LASTDIR" ]; then
+        cd "$(cat "$QUICKDIR_LASTDIR")"
+        rm -f "$QUICKDIR_LASTDIR"
+    fi
+    unset QUICKDIR_LASTDIR
 }
 
 # Cursor/VSCode: disable conda prompt modifications for clean agent prompts

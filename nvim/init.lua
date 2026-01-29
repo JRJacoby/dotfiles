@@ -166,6 +166,11 @@ require("lazy").setup({
       require("auto-session").setup({
         suppressed_dirs = { "~/", "~/Downloads", "/" },
       })
+
+      -- Periodic session save every 15 minutes (for HPC job timeouts)
+      vim.fn.timer_start(900000, function()
+        require("auto-session").auto_save_session()
+      end, { ["repeat"] = -1 })
     end
   },
 
