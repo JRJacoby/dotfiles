@@ -30,8 +30,10 @@ export HISTCONTROL=ignoredups:erasedups
 export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
 
 # 5. Vim-style history navigation (Ctrl+K = up, Ctrl+J = down)
-bind '"\C-k": previous-history'
-bind '"\C-j": next-history'
+if [[ $- == *i* ]]; then
+    bind '"\C-k": previous-history'
+    bind '"\C-j": next-history'
+fi
 
 # Locale - use en_US.UTF-8 if available, otherwise fall back to C.UTF-8
 if locale -a 2>/dev/null | grep -q "en_US.utf8"; then
