@@ -170,9 +170,18 @@ fps = 25
 
 def fit_single_model_wrapper(kappa, seed_idx):
     """Wrapper that loads data inside the SLURM job and fits one model."""
-    syllables_dict = utils.load_syllables_dict(results_h5_path)
+    # IMPORTANT: submitit pickles this function and unpickles it in a fresh
+    # Python process on the compute node. sys.path modifications from the
+    # main script do NOT carry over. You must add the path to shmoseq_utils
+    # inside the wrapper, and import it here -- not at module level.
+    import sys as _sys
+    _scripts_dir = str(Path(__file__).resolve().parent.parent)
+    if _scripts_dir not in _sys.path:
+        _sys.path.insert(0, _scripts_dir)
+    import shmoseq_utils as _utils
+    syllables_dict = _utils.load_syllables_dict(results_h5_path)
     scan_dir = output_dir / "kappa_scan"
-    return utils.fit_single_model(
+    return _utils.fit_single_model(
         kappa, seed_idx, syllables_dict, scan_dir, n_states, fps
     )
 
