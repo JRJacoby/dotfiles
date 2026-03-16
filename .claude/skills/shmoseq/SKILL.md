@@ -149,6 +149,85 @@ for _ in tqdm.trange(100, desc="Gibbs sampling"):
         raise RuntimeError("NaNs during fitting")
 ```
 
+### SLURM Parallelization with submitit
+
+For production use, parallelize the kappa scan across GPU nodes using `submitit`. Each
+(kappa, seed) combination runs as an independent SLURM job.
+
+The pattern: define a picklable wrapper function that loads data and calls `fit_single_model`,
+then use `executor.map_array` to fan out all jobs. Run the script once to submit, then
+again after jobs complete to generate plots and downstream analyses.
+
+```python
+import submitit
+import shmoseq_utils as utils
+
+# These must be module-level (picklable) for submitit
+results_h5_path = Path("path/to/results.h5")
+output_dir = Path("path/to/output")
+n_states = 5
+fps = 25
+
+def fit_single_model_wrapper(kappa, seed_idx):
+    """Wrapper that loads data inside the SLURM job and fits one model."""
+    syllables_dict = utils.load_syllables_dict(results_h5_path)
+    scan_dir = output_dir / "kappa_scan"
+    return utils.fit_single_model(
+        kappa, seed_idx, syllables_dict, scan_dir, n_states, fps
+    )
+
+def run_kappa_scan(kappas, random_seeds):
+    """Submit kappa scan jobs via submitit. Skip already-completed models."""
+    scan_dir = output_dir / "kappa_scan"
+    scan_dir.mkdir(parents=True, exist_ok=True)
+    log_dir = output_dir / "submitit_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Collect only jobs that haven't been run yet
+    jobs_to_submit = []
+    for kappa in kappas:
+        for seed_idx in random_seeds:
+            file_prefix = scan_dir / f"kappa={kappa}_nstates={n_states}_seed={seed_idx}"
+            seq_path = Path(f"{file_prefix}-state_sequences.p")
+            info_path = Path(f"{file_prefix}-additional_info.p")
+            if not (seq_path.exists() and info_path.exists()):
+                jobs_to_submit.append((kappa, int(seed_idx)))
+
+    if not jobs_to_submit:
+        print("All kappa scan models already exist")
+        return
+
+    print(f"Submitting {len(jobs_to_submit)} jobs via submitit...")
+
+    executor = submitit.AutoExecutor(folder=str(log_dir))
+    executor.update_parameters(
+        slurm_partition="gpu_quad,gpu",
+        slurm_qos="gpuquad_qos",
+        gpus_per_node=1,
+        cpus_per_task=4,
+        mem="24G",
+        timeout_min=60,
+        slurm_job_name="shmoseq",
+    )
+
+    kappas_list = [job[0] for job in jobs_to_submit]
+    seeds_list = [job[1] for job in jobs_to_submit]
+    jobs = executor.map_array(fit_single_model_wrapper, kappas_list, seeds_list)
+
+    print(f"Submitted {len(jobs)} jobs")
+    for job, (kappa, seed_idx) in zip(jobs, jobs_to_submit):
+        print(f"  Job {job.job_id}: kappa={kappa:.0f}, seed={seed_idx}")
+    print("\nMonitor with: squeue -u $USER")
+    print("After completion, run this script again to generate plots.")
+```
+
+Key points:
+- The wrapper function must be **picklable** (module-level, no closures over unpicklable objects)
+- Data is loaded **inside** each job (not serialized via submitit)
+- Already-completed models are skipped (idempotent re-runs)
+- Typical SLURM settings: 1 GPU, 4 CPUs, 24G RAM, 60 min timeout per model
+- The script is designed to be run twice: once to submit jobs, once after completion for analysis
+
 ### Saved Model Format
 
 Each fitted model produces two pickle files:
@@ -166,7 +245,9 @@ Compute MI at multiple lags to verify hierarchical structure exists and identify
 
 ### 2. Kappa Scan
 
-Fit models across a grid of `kappa` values (e.g., `np.logspace(4, 5, 20)`) with multiple random seeds (3-10) per kappa. Parallelize on SLURM in production; nested loop for tutorials.
+Fit models across a grid of `kappa` values (e.g., `np.logspace(4, 5, 20)`) with multiple random seeds (3-10) per kappa. Two approaches:
+- **Tutorial/small datasets:** Nested for loop (see tutorial script reference below)
+- **Production/HPC:** submitit SLURM parallelization (see "SLURM Parallelization with submitit" above) -- each (kappa, seed) pair runs as an independent GPU job
 
 ### 3. Plot Kappa Scan
 
