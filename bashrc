@@ -9,6 +9,7 @@ fi
 alias ..='cd ..'
 alias nv='nvim'
 alias ta='tmux attach'
+alias claude-local='ANTHROPIC_BASE_URL="http://localhost:11434" ANTHROPIC_API_KEY="ollama" ANTHROPIC_MODEL="qwen2.5-coder:32b-instruct-q4_K_M" command claude'
 
 # --- HISTORY CONFIGURATION ---
 
@@ -51,8 +52,18 @@ export PATH=$PATH:$HOME/local/go/bin
 export PATH=$PATH:$HOME/go/bin
 export PATH=$HOME/.local/nvim/bin:$PATH
 export PATH=$HOME/gopath/bin:$PATH
+export PATH=$HOME/.local/bin:$PATH
+export LD_LIBRARY_PATH=$HOME/.local/lib/ollama:$LD_LIBRARY_PATH
 
 export UV_INDEX_STRATEGY=first-index
+
+sc() { scancel "$@"; }
+_sc_completions() {
+    local jobs
+    jobs=$(squeue -u "$USER" -h -o "%i" 2>/dev/null)
+    COMPREPLY=($(compgen -W "$jobs" -- "${COMP_WORDS[COMP_CWORD]}"))
+}
+complete -F _sc_completions sc
 
 function g() {
 	gemini -p "$*"

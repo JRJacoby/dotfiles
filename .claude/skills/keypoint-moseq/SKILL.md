@@ -506,6 +506,24 @@ results = kpms.extract_results(
 )
 ```
 
+### results.h5 already exists with overlapping recordings
+`extract_results` (and `apply_model`, which calls it internally) will raise a `RuntimeError` if `results.h5` already contains any of the recording names being saved. This commonly happens when:
+- Re-running `extract_results` after a previous successful run
+- Running `apply_model` on data that includes the original training recordings (as recommended in the FAQ for consistency)
+
+To overwrite existing results, pass `overwrite=True`:
+```python
+# In apply_model (most common case)
+results = kpms.apply_model(model, data, metadata, project_dir, model_name,
+                           overwrite=True, **config())
+
+# In extract_results directly
+results = kpms.extract_results(model, metadata, project_dir, model_name,
+                               overwrite=True)
+```
+
+See: https://keypoint-moseq.readthedocs.io/en/latest/FAQs.html#detecting-existing-syllables-in-new-data
+
 ### Auto-detect fps from video files
 Don't hardcode fps - detect it from video files using OpenCV:
 ```python
@@ -620,6 +638,10 @@ else:
 6. **Save checkpoints**: Full model fitting is slow; checkpoints allow resuming.
 
 7. **Grid movies for validation**: The ultimate test is whether syllables look behaviorally meaningful.
+
+## Releasing
+
+See [releasing.md](./releasing.md) for the full release process (GitHub release, PyPI upload, sharp edges).
 
 ---
 
