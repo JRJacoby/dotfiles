@@ -159,6 +159,45 @@ Log when a step starts, when it skips (outputs fresh), and when items within a l
 
 Steps create their own output directories as needed (`makedirs(exist_ok=True)`). Do not require directories to exist beforehand.
 
+## Plot Sidecar Files
+
+Any time a plot compares groups (genotypes, conditions, etc.), it must have a **sidecar file** saved alongside it containing the statistical details for every comparison. The sidecar file shares the plot's basename with a `_stats.json` suffix.
+
+```
+plots/
+  state_frequencies_by_genotype.png
+  state_frequencies_by_genotype_stats.json
+```
+
+The sidecar file is structured JSON containing:
+- All pairwise comparisons with test statistic, raw p-value, corrected p-value, and significance flag
+- The statistical test used and any correction method
+- Sample sizes per group
+- Summary statistics (means, medians, CIs) per group
+
+```json
+{
+  "test": "bootstrap_permutation",
+  "correction": "FDR",
+  "alpha": 0.05,
+  "n_bootstrap": 10000,
+  "comparisons": [
+    {
+      "groups": ["WT", "HET"],
+      "n": [10, 10],
+      "means": [0.32, 0.28],
+      "ci_95": [[0.28, 0.36], [0.24, 0.32]],
+      "statistic": 0.04,
+      "p_value": 0.023,
+      "p_corrected": 0.069,
+      "significant": false
+    }
+  ]
+}
+```
+
+This ensures all statistical results are machine-readable and reproducible, not just visually indicated on the plot.
+
 ## Fail Fast, Fail Hard
 
 ### Validate early
