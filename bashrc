@@ -45,6 +45,7 @@ fi
 export LC_ALL=$LANG
 
 export VSCODE_SERVER_DIR=$HOME/.vscode-server
+export TMUX_TMPDIR=/tmp
 
 # PATH
 export PATH=$HOME/bin:$PATH

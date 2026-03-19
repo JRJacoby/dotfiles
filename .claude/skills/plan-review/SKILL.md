@@ -27,7 +27,9 @@ Evaluate the plan against each of these criteria. For each one, either note spec
 
 6. **Violations of project norms** — Does the plan propose doing something inconsistent with how the rest of the project works? Check existing patterns for naming, file organization, code style, data handling, etc. Functionality and data structures that are confined to a certain scope (file, module, directory, layer, class) should stay confined to that scope — e.g., if database operations only ever happen in the service layer, the plan should not introduce them elsewhere. If the plan intentionally breaks an established pattern, it must explicitly acknowledge and justify the deviation.
 
-7. **Bad practices** — Does the plan introduce anything that would degrade code quality, maintainability, or correctness? Unnecessary complexity, duplication, brittle assumptions, etc.
+7. **User flow consistency** — Walk through the plan from the user's perspective. Does the plan support the intended usage patterns end-to-end? Do inputs, outputs, and interaction sequences make sense for how someone will actually use this? Are there flows where the user would need to do something unintuitive, or where the output of one step doesn't match what the next step (or downstream consumer) expects? If the plan doesn't make the intended usage clear, flag that as an issue — a plan that can't be evaluated against user flows is under-specified.
+
+8. **Bad practices** — Does the plan introduce anything that would degrade code quality, maintainability, or correctness? Unnecessary complexity, duplication, brittle assumptions, etc.
 
 ## Process
 

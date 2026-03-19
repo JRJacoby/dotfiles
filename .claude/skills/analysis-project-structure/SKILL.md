@@ -9,12 +9,15 @@ These are the user's requirements for how analysis projects are organized on dis
 
 ## Top-Level Layout
 
-An analysis project has exactly three top-level data directories, each organized by data type:
+An analysis project may have some of the following top-level directories:
 
 ```
 <project>/
   scripts/       # Analysis scripts and pipeline code
   tables/        # CSV and tabular outputs (summaries, master tables, etc.)
+  plots/         # Generated figures and visualizations
+  docs/          # Plans, notes, and other documentation
+  logs/          # Pipeline run logs
   <data_type>/   # Raw or processed data (named for the data type, e.g. moseq_sessions/)
 ```
 
@@ -37,6 +40,7 @@ tables/<YYYY-MM-DD>_<descriptive_name>/
 - The descriptive name is a short, lowercase, underscore-separated label (e.g., `initial_dataset_inventory`, `stress_vs_naive_comparison`).
 - **Related work shares the same subdirectory name across top-level directories.** If `scripts/2026-03-12_initial_dataset_inventory/` produces CSV outputs, those go in `tables/2026-03-12_initial_dataset_inventory/`.
 - Do not put files directly in a top-level directory — always use a unit-of-work subdirectory.
+- **If it is unclear whether a new task belongs in an existing unit of work or warrants a new one, ask the user before creating directories.**
 
 ## Path References in Scripts
 

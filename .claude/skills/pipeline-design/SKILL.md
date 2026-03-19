@@ -135,13 +135,31 @@ Freshness checks use only the final output path, never the `.tmp` path.
 
 ## Logging
 
-All log messages must include **timestamps**. Use a consistent format like `[YYYY-MM-DD HH:MM:SS]`.
+All log messages must include **timestamps** and be written to a **log file**. Each pipeline run creates a new log file named with the **timestamp of when the run started** (e.g., `2026-03-18_14-30-05.log`). Configure logging once at the top of `main()` and use it throughout.
+
+```python
+from datetime import datetime
+import logging
+
+def main():
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_path = LOG_DIR / f"{timestamp}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        filename=log_path,
+        level=logging.INFO,
+        format="[%(asctime)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    log = logging.getLogger(__name__)
+    ...
+```
 
 Within loops (at per-item granularity, e.g., per-session — not per-frame), log each item with a **current/total counter**:
 
 ```python
 for i, row in enumerate(sessions):
-    log(f"process_sessions: [{i+1}/{len(sessions)}] {row['session_id']}")
+    log.info(f"process_sessions: [{i+1}/{len(sessions)}] {row['session_id']}")
 ```
 
 When processing large data in chunks (e.g., streaming video frames in batches), log each chunk with a chunk/total counter:
@@ -150,7 +168,7 @@ When processing large data in chunks (e.g., streaming video frames in batches), 
 for chunk_idx in range(n_chunks):
     frames = read_chunk(...)
     process(frames)
-    log(f"process_sessions: [{i+1}/{n}] {session_id} chunk [{chunk_idx+1}/{n_chunks}]")
+    log.info(f"process_sessions: [{i+1}/{n}] {session_id} chunk [{chunk_idx+1}/{n_chunks}]")
 ```
 
 Log when a step starts, when it skips (outputs fresh), and when items within a loop are processed or skipped.
