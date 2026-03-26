@@ -9,6 +9,7 @@ fi
 alias ..='cd ..'
 alias nv='nvim'
 alias ta='tmux attach'
+alias o2='ssh joj144@o2.hms.harvard.edu'
 alias claude-local='ANTHROPIC_BASE_URL="http://localhost:11434" ANTHROPIC_API_KEY="ollama" ANTHROPIC_MODEL="qwen2.5-coder:32b-instruct-q4_K_M" command claude'
 
 # --- HISTORY CONFIGURATION ---
