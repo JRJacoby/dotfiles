@@ -7,6 +7,19 @@ description: Enforce the standard directory layout for analysis projects. Use wh
 
 These are the user's requirements for how analysis projects are organized on disk. Follow them exactly when creating files, directories, or referencing paths.
 
+## Project Initialization
+
+Use **git** and **uv** for project management unless otherwise specified.
+Initialize with:
+
+```bash
+git init
+uv init --python 3.10 --bare  # --bare avoids creating unnecessary main.py and README.md
+```
+
+Pin the Python version in `pyproject.toml` as appropriate for the project's
+dependencies (e.g., `requires-python = ">=3.10,<3.11"` for keypoint-moseq).
+
 ## Top-Level Layout
 
 An analysis project may have some of the following top-level directories:
@@ -31,8 +44,13 @@ Below each top-level directory, all content is organized into **dated, descripti
 ```
 scripts/<YYYY-MM-DD>_<descriptive_name>/
 tables/<YYYY-MM-DD>_<descriptive_name>/
+docs/<YYYY-MM-DD>_<descriptive_name>/
+plots/<YYYY-MM-DD>_<descriptive_name>/
+logs/<YYYY-MM-DD>_<descriptive_name>/
 <data_type>/<YYYY-MM-DD>_<descriptive_name>/
 ```
+
+**This pattern applies to every top-level directory, not just the ones shown in examples elsewhere.** `docs/`, `logs/`, and `plots/` follow the same unit-of-work convention as `scripts/` and `tables/`.
 
 ### Rules
 

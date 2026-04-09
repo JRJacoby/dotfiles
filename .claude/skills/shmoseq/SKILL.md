@@ -327,6 +327,15 @@ Usually left at defaults: `trans_beta=1`, `emission_base_sigma=1`, `emission_bia
 | `generate_grid_movies(states_dict, video_paths_dict, centroids_dict, output_dir, n_states)` | Grid movies for each state |
 | `create_snub_projects(states_dict, video_paths_dict, output_dir, fps)` | SNUB projects per recording |
 
+## Important: Per-Frame vs Per-Bout Frequency
+
+When computing state/syllable frequencies, **always ask the user whether they want per-frame or per-bout (runlength) frequencies** before defaulting to either. The two metrics answer different questions:
+
+- **Per-frame** (`runlength=False`): proportion of total time spent in each state. Answers "how much time does the animal allocate to this state?"
+- **Per-bout** (`runlength=True`): proportion of total state visits (bouts) that are each state. Answers "how often does the animal enter this state?"
+
+These can diverge substantially when states have very different durations. Both should typically be reported in genotype comparison analyses.
+
 ## Tutorial Script Reference
 
 The self-contained tutorial script at `scripts/shmoseq_tutorial.py` demonstrates the full pipeline without external utility dependencies. It is designed for lab members to copy and adapt. Below is the complete script for reference.

@@ -132,6 +132,21 @@ original `frames`. Downstream MoSeq2 steps must be told which dataset to use:
 
 Note: `--h5-path` needs a leading slash (HDF5 internal path).
 
+### Disable spatial filtering for PCA on size-normed frames
+
+The sizenorm model already produces clean reconstructions — it was trained to
+remove tails and noise as part of its reconstruction. Applying moseq2-pca's
+Gaussian blur and tail filter on top of the model output is redundant
+over-smoothing. When running train-pca and apply-pca on `size_norm_frames`,
+disable both filters:
+
+```bash
+moseq2-pca train-pca --h5-path /size_norm_frames \
+    --gaussfilter-space 0 0 --tailfilter-size 0 0
+```
+
+If using a custom GPU PCA script, skip the equivalent preprocessing steps.
+
 ## SLURM Considerations
 
 - Size norm needs a GPU: use `gpu_quad,gpu` partition with `--gres=gpu:1` and

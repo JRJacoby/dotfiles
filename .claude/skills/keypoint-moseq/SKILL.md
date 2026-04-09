@@ -9,20 +9,19 @@ Keypoint-MoSeq is a machine learning method for unsupervised segmentation of ani
 
 ## Installation
 
-**Important: Always use Python 3.10 for keypoint-moseq projects.** Later versions may have compatibility issues with JAX and other dependencies.
+**Important: Always use Python 3.10 for keypoint-moseq projects.** Later
+versions may have compatibility issues with JAX and other dependencies.
+
+Use **uv** to create a project-specific virtual environment (not conda -- conda
+is only for depth-moseq / moseq2 projects which use the `moseq2_app` env):
 
 ```bash
-# Create environment with Python 3.10
-uv init --python 3.10
-# or
-conda create -n kpms python=3.10
-
-pip install keypoint-moseq
-# or
-uv add keypoint-moseq
+uv init --python 3.10 --bare
+uv add "keypoint-moseq[cuda]"
 ```
 
-Requires JAX. For GPU support, install JAX with CUDA first.
+The `[cuda]` extra installs JAX with GPU support. This is the preferred
+one-step installation for GPU-enabled keypoint-moseq.
 
 ## Core Pipeline
 
@@ -431,6 +430,8 @@ while not in_target:
 
 **Important:** Kappa tuning must be done twice - once for AR-HMM fitting and again for full model fitting, as the optimal kappa differs between them. Start the full model binary search using the final kappa value from AR-HMM as the initial guess.
 
+**Pitfall: Do NOT narrow the full model search bounds around the AR-HMM kappa.** The optimal full model kappa can differ from the AR-HMM kappa by more than 3 orders of magnitude — especially with `nlags=1` or `location_aware=True`. Always use the full search range (1e3 to 1e18) for both AR-HMM and full model searches. A ±3 log-unit window around the AR-HMM kappa will trap the search at its bounds and produce out-of-target durations.
+
 ### Checkpoints are saved automatically by fit_model
 There is **no `save_checkpoint()` function**. Checkpoints are saved automatically by `fit_model()`:
 - Each `fit_model()` call creates a new checkpoint directory with auto-generated timestamp name (e.g., `2024_01_15-10_30_45`)
@@ -475,10 +476,21 @@ model, model_name = kpms.fit_model(
 This warm-start approach is much faster than initializing the full model from scratch each time.
 
 ### Cleanup intermediate checkpoints
-Each `fit_model()` call creates a new checkpoint directory. After a long pipeline, clean up intermediate checkpoints:
-```python
-import shutil
+Each `fit_model()` call creates a new checkpoint directory. **Clean up during binary search, not just at the end** — a 15-probe search creates 15 checkpoint dirs (~500MB each), and you may run multiple searches (AR-HMM + full model). Delete the previous probe's checkpoint before starting the next:
 
+```python
+# Inside binary_search_kappa loop, before updating best_model_name:
+if best_model_name and best_model_name != model_name:
+    old_dir = project_dir / best_model_name
+    if old_dir.exists():
+        shutil.rmtree(old_dir)
+
+# At end of pipeline, keep only the final model
+cleanup_intermediate_checkpoints(PROJECT_DIR, final_model_name)
+```
+
+Also clean up the AR-HMM checkpoint at the end — the full model checkpoint contains everything needed:
+```python
 def cleanup_intermediate_checkpoints(project_dir, keep_model_name):
     """Remove all checkpoint directories except the final one."""
     for item in project_dir.iterdir():
@@ -486,9 +498,6 @@ def cleanup_intermediate_checkpoints(project_dir, keep_model_name):
             if (item / "checkpoint.h5").exists():
                 shutil.rmtree(item)
                 print(f"Removed: {item.name}")
-
-# At end of pipeline, keep only the final model
-cleanup_intermediate_checkpoints(PROJECT_DIR, final_model_name)
 ```
 
 ### extract_results requires model_name parameter
@@ -622,6 +631,15 @@ else:
     state["arhmm"]["model_name"] = model_name  # Save checkpoint name
     save_kappa_state(state)
 ```
+
+## Important: Per-Frame vs Per-Bout Frequency
+
+When computing syllable frequencies, **always ask the user whether they want per-frame or per-bout frequencies** before defaulting to either. The two metrics answer different questions:
+
+- **Per-frame**: proportion of total time spent in each syllable. Answers "how much time does the animal allocate to this syllable?"
+- **Per-bout**: proportion of total syllable occurrences (bouts) that are each syllable. Answers "how often does the animal enter this syllable?"
+
+These can diverge substantially when syllables have very different durations. Both should typically be reported in group comparison analyses.
 
 ## Tips
 
@@ -933,6 +951,14 @@ def binary_search_kappa(
 
         print(f"    Median duration: {median_dur:.1f} frames ({median_dur/fps*1000:.0f}ms)")
 
+        # Clean up previous probe's checkpoint (avoid accumulating dozens
+        # of intermediate checkpoints during binary search)
+        if best_model_name and best_model_name != model_name:
+            old_dir = PROJECT_DIR / best_model_name
+            if old_dir.exists():
+                shutil.rmtree(old_dir)
+                print(f"    Cleaned up previous probe: {best_model_name}")
+
         # Track best result
         best_kappa = kappa
         best_model = model
@@ -1195,12 +1221,14 @@ def main():
         )
 
         # Initialize full model search bounds from AR-HMM result
-        # Start with a narrower range centered on AR-HMM kappa
-        ar_log_kappa = np.log10(ar_kappa)
+        # IMPORTANT: Use full range, not a narrow window around AR-HMM kappa.
+        # The optimal full model kappa can differ from AR-HMM by more than
+        # 3 orders of magnitude (observed with nlags=1 and location_aware),
+        # so a ±3 window around ar_kappa can trap the search at its bounds.
         if kappa_state["full"]["log_min"] is None:
-            kappa_state["full"]["log_min"] = float(max(KAPPA_LOG_MIN, ar_log_kappa - 3))
+            kappa_state["full"]["log_min"] = float(KAPPA_LOG_MIN)
         if kappa_state["full"]["log_max"] is None:
-            kappa_state["full"]["log_max"] = float(min(KAPPA_LOG_MAX, ar_log_kappa + 3))
+            kappa_state["full"]["log_max"] = float(KAPPA_LOG_MAX)
         save_kappa_state(kappa_state)
 
         def fit_full_model(kappa):

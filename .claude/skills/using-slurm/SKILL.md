@@ -1,9 +1,14 @@
 ---
 name: using-slurm
-description: Submit and manage SLURM jobs on the O2 cluster. Use when running GPU jobs, submitting batch work, using submitit, or troubleshooting SLURM errors.
+description: Submit and manage SLURM jobs on the O2 cluster. ALWAYS use this skill when submitting ANY SLURM job (sbatch, srun, salloc, submitit) to ensure correct partitions, QOS, and resource settings.
 ---
 
 # Using SLURM on O2
+
+**IMPORTANT**: Do NOT use SLURM unless the user explicitly asks you to, or a
+domain-specific skill (like moseq2) has SLURM built into its workflow. The user
+is typically already on an interactive GPU node and wants you to run things
+directly. This skill is reference material for when SLURM is actually needed.
 
 The cluster is **O2** (Harvard Medical School Research Computing). Jobs are
 submitted via SLURM, either directly with `sbatch`/`srun` or programmatically
@@ -19,33 +24,40 @@ via Python's `submitit` library.
 | `medium` | CPU only (262 nodes) | 5 days | Longer CPU jobs |
 | `interactive` | CPU only | 12 hours | Interactive sessions |
 
-For GPU work, always request `gpu_quad,gpu` (comma-separated) to use either
-partition. The QOS for GPU quad is `gpuquad_qos`.
+## Default GPU Job Setup
 
-## Typical GPU Job Parameters
+**Always use this configuration for GPU jobs.** It submits to three partitions
+for fastest scheduling and matches the user's `sa` interactive allocation setup.
 
-```python
-executor.update_parameters(
-    slurm_partition="gpu_quad,gpu",
-    slurm_qos="gpuquad_qos",
-    gpus_per_node=1,
-    cpus_per_task=4,
-    slurm_mem="24G",
-    timeout_min=60,
-    slurm_job_name="my_job",
-)
-```
-
-Or via sbatch:
 ```bash
-#SBATCH -p gpu_quad,gpu
+#SBATCH -p gpu_quad,gpu,gpu_requeue
 #SBATCH --qos=gpuquad_qos
 #SBATCH --gres=gpu:1
 #SBATCH -c 4
 #SBATCH --mem=24G
-#SBATCH -t 0-01:00
+#SBATCH -t 2:00:00
 #SBATCH -J my_job
 ```
+
+Or via submitit:
+```python
+executor.update_parameters(
+    slurm_partition="gpu_quad,gpu,gpu_requeue",
+    slurm_qos="gpuquad_qos",
+    gpus_per_node=1,
+    cpus_per_task=4,
+    slurm_mem="24G",
+    timeout_min=120,
+    slurm_job_name="my_job",
+)
+```
+
+**Key points:**
+- **Three partitions:** `gpu_quad,gpu,gpu_requeue` — SLURM picks whichever has
+  availability first. `gpu_requeue` is preemptible but often starts immediately.
+- **QOS:** Always `gpuquad_qos` — this works across all three GPU partitions.
+- **Defaults:** 1 GPU, 4 CPUs, 24GB RAM. Adjust mem/time as needed per job.
+- **Do not** submit to a single GPU partition unless there's a specific reason.
 
 ## Using submitit (Python)
 

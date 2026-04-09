@@ -301,6 +301,100 @@ moseq2_app/
 | **GPU** | Not required | JAX with optional GPU |
 | **Python** | 3.6-3.7 (legacy) | 3.10 |
 
+## Important: Per-Frame vs Per-Bout Frequency
+
+When computing syllable frequencies, **always ask the user whether they want per-frame or per-bout frequencies** before defaulting to either. The two metrics answer different questions:
+
+- **Per-frame**: proportion of total time spent in each syllable. Answers "how much time does the animal allocate to this syllable?"
+- **Per-bout**: proportion of total syllable occurrences (bouts) that are each syllable. Answers "how often does the animal enter this syllable?"
+
+These can diverge substantially when syllables have very different durations. Both should typically be reported in group comparison analyses.
+
 ## Working Rules
 
+- **ALWAYS use a flip classifier for extraction.** The `--flip-classifier`
+  flag (or `flip_classifier` in config.yaml) is MANDATORY. Without it, the
+  extracted mouse orientation flips randomly between frames, corrupting PCA
+  components and all downstream modeling. The default is `null` which means
+  NO flip correction. Always set it explicitly. Available classifiers:
+  - Azure Kinect: `flip-classifier-azure-temp.pkl` (download from
+    `https://moseq-data.s3.amazonaws.com/flip-classifier-azure-temp.pkl`)
+  - Kinect v2 C57 males: `flip_classifier_k2_c57_10to13weeks.pkl`
+  - Kinect v2 with fiber: `flip_classifier_k2_largemicewithfiber.pkl`
+  - Kinect v2 Inscopix: `flip_classifier_k2_inscopix.pkl`
+  Use `moseq2-extract download-flip-file` to download interactively, or
+  wget the URL directly. **Verify** the config.yaml has a non-null
+  `flip_classifier` path before running batch-extract.
 - **Never commit `docs/plans/`** to any moseq2 repo. Design docs and plans should stay local or in the skills/memory system, not in the repositories.
+- **Prefer the CLI over manual Python calls.** Each package has a Click-based CLI (`moseq2-extract`, `moseq2-pca`, `moseq2-model`, `moseq2-viz`) that wraps all standard operations. Use the CLI entry points rather than calling internal util/wrapper functions directly. Only drop to the Python API when the CLI doesn't expose the needed functionality (e.g., running E-step on a saved model, custom analysis loops).
+
+## CLI Quirks
+
+- **moseq2-pca SLURM partition flag:** The `train-pca` and `apply-pca` commands
+  use `-q` / `--queue` (not `--partition`) to specify the SLURM partition. The
+  default is `"debug"`, which does not exist on the O2 cluster. Always override
+  with `--queue short` (or the appropriate partition).
+- **moseq2-extract batch-extract:** Does not accept `--camera-type` directly.
+  Camera type must be set via `generate-config --camera-type <type>`, then passed
+  to `batch-extract` via `--config-file`. The default file extension is `.dat`;
+  for Azure Kinect `.avi` files, pass `--extensions .avi`.
+- **moseq2-extract auto-detection:** With `--camera-type auto`, the extract
+  wrapper can infer camera type from file extension (`.mkv` → azure) or video
+  resolution (640×576 → azure, 512×424 → kinect). However, `generate-config`
+  does not support auto-detection — specify the camera type explicitly.
+- **moseq2-pca camera type:** `train-pca` accepts `--camera-type` which adjusts
+  Gaussian filter and tail filter defaults (e.g., azure uses larger filters).
+  `apply-pca` does NOT accept this flag — it inherits settings from the trained
+  PCA config.
+
+- **SLURM in moseq2 is part of the tool's built-in workflow.** Unlike general
+  tasks (where you should NEVER use SLURM — just run directly on the GPU node),
+  moseq2 commands like `batch-extract` and `kappa-scan` submit SLURM jobs
+  internally. This is expected and correct — it's how moseq2 works. This
+  skill-specific SLURM usage overrides the general "never use SLURM" rule.
+
+- **Do NOT orchestrate across SLURM boundaries in a single script.** The MoSeq2
+  pipeline has multiple stages that submit SLURM jobs (extraction, PCA, kappa
+  scan). These stages are "fire and forget" — they submit jobs and return
+  immediately, with no reliable way to block until completion. Attempting to
+  poll and wait within a single script leads to race conditions, corrupt
+  outputs, and duplicate job submissions. Instead, **write separate scripts for
+  each SLURM boundary:**
+  1. Extract (submits sbatch jobs, exits)
+  2. Train PCA (runs via Dask-jobqueue or locally, exits)
+  3. Apply PCA (same as train)
+  4. Kappa scan (submits sbatch jobs, exits)
+  5. Model selection + viz + export (runs locally, no SLURM)
+
+  Run each script after verifying the previous stage's outputs are valid (e.g.,
+  check that H5 files are readable, not just that they exist).
+- **SLURM job names are "wrap", not identifiable:** When `batch-extract` or
+  `kappa-scan` submit SLURM jobs via `sbatch --wrap "..."`, the job name is
+  just `"wrap"` — not `"moseq2-extract"` or anything identifiable. Do not
+  try to track job completion by job name.
+- **PCA Dask-jobqueue is unreliable on O2.** `train-pca` and `apply-pca` with
+  `--cluster-type slurm` use Dask-jobqueue's SLURMCluster, which has failed
+  silently in practice. Prefer `--cluster-type local` for PCA on datasets up
+  to ~100 sessions. For larger datasets, use `--cluster-type slurm` but verify
+  that workers actually started and produced output.
+
+## Data Preprocessing in moseq2-model
+
+The **only preprocessing** applied to PC scores before modeling is **whitening** (Cholesky decomposition of the covariance matrix). There is no filtering, scaling, clipping, or other transformation. Specifically:
+
+1. **`load_pcs()`** — loads PC scores from H5/pickle/MAT, truncates to `npcs` columns. No transformation.
+2. **`whiten_all()` or `whiten_each()`** — whitens the data using Cholesky decomposition. Computes `mu`, `L` (Cholesky factor), and `offset`, then applies: `whitened = solve(L, (x - mu).T).T + offset`. Parameters are saved in the model pickle as `whitening_parameters`.
+3. **Optional AWGN** — additive white Gaussian noise (`--noise-level`), defaults to 0 (off). Not used in standard pipelines.
+4. **AR striding** — handled internally by pyhsmm's `model.add_data()`, which calls `AR_striding()` to create lagged views. This is a reshape, not a data transformation.
+
+When re-attaching data to a saved model (e.g., for E-step computation), you must:
+- Load and truncate PC scores the same way (`load_pcs` with same `npcs`)
+- Apply the **saved** whitening parameters from the pickle (not recompute them)
+- Call `AR_striding(whitened_data, nlags)` to create the lagged view
+- Assign to `s.data` for each state sequence in `model.states_list`
+
+There is no standalone "apply saved whitening" function. The transform is inlined in `apply_model()` (train/util.py:330-335):
+```python
+mu, L, offset = wp["mu"], wp["L"], wp["offset"]
+whitened = np.linalg.solve(L, (x - mu).T).T + offset
+```

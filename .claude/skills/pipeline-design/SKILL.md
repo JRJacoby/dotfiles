@@ -73,6 +73,73 @@ def step1_count_samples():
 def step2_extract_features():
 ```
 
+## Docstrings
+
+Every function — helpers and pipeline steps alike — must have a docstring. Docstrings serve two audiences: (1) someone reading the function signature who needs the technical contract (inputs, outputs, types, side effects), and (2) a coworker coming to the project later who needs to understand **why this function exists** in the context of the project's scientific or analytical goals.
+
+### Required content
+
+1. **Purpose and motivation** (first line or short paragraph): What does this function accomplish, and why does the project need it? Connect it to the analytical goal — not just "processes sessions" but *why* those sessions need this processing.
+2. **Parameters**: Name, type, and meaning of each parameter. For complex types (DataFrames, dicts), describe the expected schema or keys.
+3. **Returns**: Type and meaning of the return value. For step functions that return nothing, this can be omitted.
+4. **Side effects**: Any files written to disk (with path patterns), logging, or state changes. For step functions this is the primary output mechanism, so be explicit about what gets saved and where.
+5. **Inputs read from disk** (for step functions): Which module-level constants or files the function reads, since steps take no arguments.
+
+### When the agent lacks context
+
+If the agent writing the pipeline does not have enough context to write the "why" portion of a docstring — e.g., it doesn't know the scientific motivation behind a step — it must **stop and ask the user** rather than writing a vague or generic placeholder. A docstring that says "Process the data" is worse than useless; it gives the illusion of documentation while communicating nothing.
+
+### Examples
+
+```python
+# Helper
+def _plot_usage_bar(genotypes: list[str], output_path: Path):
+    """Plot syllable usage frequencies as a bar chart for the given genotypes.
+
+    We compare usage distributions across genotypes to identify syllables
+    whose frequency differs between groups — the primary behavioral readout
+    from the MoSeq model.
+
+    Parameters
+    ----------
+    genotypes : list[str]
+        Genotype labels to include (e.g., ["WT", "KO"]). Must match values
+        in the 'genotype' column of the session table.
+    output_path : Path
+        Where to save the PNG figure.
+
+    Side effects
+    ------------
+    Saves a PNG plot to `output_path`.
+    Saves a stats sidecar JSON to `output_path` with suffix `_stats.json`.
+    """
+    ...
+
+
+# Step function
+def fit_model():
+    """Fit the AR-HMM to aligned pose sequences and save the model checkpoint.
+
+    This is the core unsupervised segmentation step: the AR-HMM discovers
+    recurring movement patterns (syllables) from continuous pose trajectories.
+    Downstream steps use the learned model to label frames and compare
+    syllable usage across genotypes.
+
+    Reads
+    -----
+    ALIGNED_SEQUENCES_H5 : Path
+        HDF5 file of aligned pose sequences produced by `align_sequences()`.
+    MODEL_CONFIG : Path
+        YAML config specifying kappa, gamma, and number of AR lags.
+
+    Side effects
+    ------------
+    Saves the fitted model to `MODEL_DIR / "model.p"`.
+    Saves per-frame state labels to `MODEL_DIR / "labels.h5"`.
+    """
+    ...
+```
+
 ## Idempotency
 
 The combination of caching, resumability, and atomic writes makes every pipeline run idempotent. If a run is interrupted and restarted, it picks up where it left off and produces the same result as a clean run.
@@ -116,9 +183,7 @@ def process_sessions():
 All outputs must be written atomically. Write to a temporary file, then rename to the final path in one operation. This prevents partial/corrupt outputs from being treated as complete.
 
 ```python
-import tempfile
-
-tmp = output_path.with_suffix(output_path.suffix + ".tmp")
+tmp = output_path.with_name("_tmp_" + output_path.name)
 # Clean up any leftover tmp from a previous interrupted run
 if tmp.exists():
     tmp.unlink()
@@ -128,14 +193,28 @@ tmp.rename(output_path)  # atomic on same filesystem
 
 For atomic writes, the pattern is:
 1. At the start of processing an item, delete any existing `.tmp` file for that item
-2. Write to the `.tmp` path
+2. Write to the `.tmp` path (preserving the original extension)
 3. Rename `.tmp` to the final path as the last operation
+
+**Important — matplotlib and file extensions:** matplotlib infers the output
+format from the file extension. The temp file MUST keep the same extension as
+the final file. Use `output_path.with_name("_tmp_" + output_path.name)` which
+prepends `_tmp_` to the filename while preserving the extension (e.g.,
+`plots/foo.png` → `plots/_tmp_foo.png`). Do NOT use:
+- `with_suffix(".tmp")` — changes `foo.png` to `foo.tmp` (matplotlib error)
+- `with_suffix(".png.tmp")` — changes `foo.png` to `foo.png.tmp` (same error)
+- `with_name(name + ".tmp")` — gives `foo.png.tmp` (same error)
 
 Freshness checks use only the final output path, never the `.tmp` path.
 
 ## Logging
 
 All log messages must include **timestamps** and be written to a **log file**. Each pipeline run creates a new log file named with the **timestamp of when the run started** (e.g., `2026-03-18_14-30-05.log`). Configure logging once at the top of `main()` and use it throughout.
+
+**Flush on every write.** Python buffers stdout when output is redirected (e.g., background execution, piped to a file). This makes it impossible to monitor progress in real time. Always ensure log output is unbuffered:
+- If using `print()`: pass `flush=True` on every call
+- If using `logging`: add `stream=sys.stdout` to `basicConfig` and call `sys.stdout.flush()` after each handler, or use a handler with `flush` support
+- Alternatively, run with `PYTHONUNBUFFERED=1` environment variable
 
 ```python
 from datetime import datetime
@@ -215,6 +294,19 @@ The sidecar file is structured JSON containing:
 ```
 
 This ensures all statistical results are machine-readable and reproducible, not just visually indicated on the plot.
+
+## HDF5 Performance
+
+Never use compression (`compression="gzip"`, etc.) on HDF5 datasets. Disk space is cheap; compression adds significant CPU overhead on both writes and reads, often dominating pipeline runtime. Always create datasets with no compression:
+
+```python
+# CORRECT
+f.create_dataset("data", shape=(...), dtype=np.uint16, chunks=(1, H, W))
+
+# WRONG — gzip adds ~3x overhead on write and ~2x on read
+f.create_dataset("data", shape=(...), dtype=np.uint16, chunks=(1, H, W),
+                  compression="gzip", compression_opts=4)
+```
 
 ## Fail Fast, Fail Hard
 
