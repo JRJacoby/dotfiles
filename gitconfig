@@ -6,8 +6,8 @@
 [safe]
 	directory = /n/groups/datta/sherry/moseq2-app
 [credential "https://github.com"]
-	helper = 
-	helper = !/home/joj144/bin/gh auth git-credential
+	helper =
+	helper = !gh auth git-credential
 [credential "https://gist.github.com"]
-	helper = 
-	helper = !/home/joj144/bin/gh auth git-credential
+	helper =
+	helper = !gh auth git-credential

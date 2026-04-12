@@ -33,6 +33,7 @@ vim.opt.clipboard = 'unnamedplus'
 vim.opt.number = true
 vim.opt.relativenumber = true
 
+
 -- This is where you list your plugins
 require("lazy").setup({
 
@@ -40,25 +41,13 @@ require("lazy").setup({
   -- This provides fast and accurate syntax highlighting
   {
     "nvim-treesitter/nvim-treesitter",
-    build = ":TSUpdate", -- Installs parsers on update
+    branch = "main",
+    build = ":TSUpdate",
     config = function()
-      -- This config function runs after the plugin loads
-      require("nvim-treesitter.configs").setup({
-
-        -- A list of parser names, or "all"
-        -- We're installing markdown, lua (for this config), and vimdoc (for help files)
+      require("nvim-treesitter").setup({
         ensure_installed = { "markdown", "markdown_inline", "lua", "vimdoc", "python" },
-
-        -- Install parsers synchronously (blocks startup)
         sync_install = false,
-
-        -- Automatically install missing parsers when entering a buffer
         auto_install = true,
-
-        -- Enable syntax highlighting
-        highlight = {
-          enable = true,
-        },
       })
     end,
   },
@@ -191,6 +180,11 @@ require("lazy").setup({
   -- { "another-github-user/another-plugin" },
 
 })
+
+-- Workaround: Neovim 0.12 has a bug where markdown injection queries
+-- (markdown_inline) crash languagetree.lua with "attempt to call method 'range'"
+-- Remove this once Neovim fixes the issue in a patch release.
+vim.treesitter.query.set("markdown", "injections", "")
 
 -- == KEYMAPS START HERE ==
 
