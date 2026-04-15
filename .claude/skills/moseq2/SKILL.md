@@ -63,7 +63,11 @@ All five packages share:
 **Input:** Raw depth recordings (`.dat`, `.avi`, `.mkv`), 16-bit depth frames at ~30 fps.
 
 **Output:** HDF5 files containing:
-- `frames`: Cropped, rotated depth frames (n_frames, 80, 80)
+- `frames`: Cropped, rotated height-above-floor frames (n_frames, 80, 80), uint8.
+  Values are height above the arena floor in mm (floor = 0, mouse body rises
+  above it). The extraction step subtracts each frame from the background plane,
+  converting depth-from-camera to height-from-floor, then thresholds to
+  `min_height`–`max_height` (typically 10–120 mm).
 - `frames_mask`: Confidence/validity masks
 - `scalars/`: Per-frame features (centroid, velocity, area, orientation, depth, etc.)
 - `metadata/extraction/`: ROI mask, background image, extraction parameters

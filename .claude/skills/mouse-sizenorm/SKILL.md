@@ -5,10 +5,18 @@ description: Apply mouse size normalization to MoSeq2-extracted depth frames. Us
 
 # Mouse Size Normalization
 
-Size normalization transforms MoSeq2-extracted depth frames so that all mice
-appear a canonical size, removing body size as a confound in behavioral analysis.
-It uses a pre-trained neural network (autoencoder) to reconstruct each 80x80
-depth frame at a standardized size.
+Size normalization transforms MoSeq2-extracted frames so that all mice appear a
+canonical size, removing body size as a confound in behavioral analysis. It uses
+a pre-trained neural network (autoencoder) to reconstruct each 80x80 frame at a
+standardized size.
+
+**Terminology note:** After moseq2-extract, pixel values in the `frames` dataset
+represent **height above the arena floor** (in mm), not raw depth-from-camera.
+The extraction step subtracts the background (floor plane) so that floor = 0 and
+the mouse body rises above it. The "height offset" in sizenorm corrects for
+camera-to-floor distance variation across rigs — it shifts the baseline so all
+sessions match the training distribution. Despite legacy variable names like
+`depth` in some code, the data at this stage is height-from-floor.
 
 **When to apply:** Only when the user explicitly requests it. Developmental
 studies (comparing across ages) almost always use it. Multi-genotype or multi-sex
@@ -56,7 +64,7 @@ Extracted frames (80x80 uint8, "frames" key in H5)
     |
     v
 Height offset — compare session median frame to template poses,
-    compute depth shift to match training baseline
+    compute shift to match training baseline (corrects camera-to-floor variation)
     |
     v
 Clip to 0-200mm range
