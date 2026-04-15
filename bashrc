@@ -40,14 +40,16 @@ shopt -s histappend
 export HISTCONTROL=ignoredups:erasedups
 
 # 4. Immediate Save (Write to disk after every command)
-# This ensures that if your SSH session disconnects, you don't lose your history.
-# We append to the existing PROMPT_COMMAND so we don't break other settings.
-export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
-
-# Strip VTE hook if launched from a VTE terminal (mate-terminal) into a non-VTE one (kitty)
-if ! declare -F __vte_prompt_command >/dev/null 2>&1; then
-    PROMPT_COMMAND=${PROMPT_COMMAND//__vte_prompt_command/}
-fi
+# Rebuild PROMPT_COMMAND from scratch on every bashrc invocation. Do NOT
+# export it — exporting leaks it across subshells (tmux panes, apptainer
+# enter/exit, etc.), which was causing junk to accumulate (doubled "history -a;",
+# leftover "; ;" empty segments from stripped __vte_prompt_command references),
+# culminating in "PROMPT_COMMAND: syntax error near unexpected token `;`" on
+# every prompt. Clobbering + non-exported is the simplest way to stay sane.
+# Tools sourced later in this file (zoxide, kitten shell-integration, etc.)
+# will append their own hooks after this reset.
+declare -F __vte_prompt_command >/dev/null 2>&1 || __vte_prompt_command() { :; }
+PROMPT_COMMAND="history -a"
 
 # 5. Vim-style history navigation (Ctrl+K = up, Ctrl+J = down)
 if [[ $- == *i* ]]; then
