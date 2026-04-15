@@ -1,0 +1,9 @@
+# Trash is broken on NFS (/n/groups) because the XDG trash spec requires
+# writing .Trash-<uid> at the filesystem root, which we don't own.
+# Remap lowercase `d` to permanent delete so `d` just works everywhere.
+# Shift+D still does permanent delete via the default binding.
+
+[mgr]
+prepend_keymap = [
+    { on = "d", run = "remove --permanently", desc = "Delete permanently (trash unavailable on NFS)" },
+]
