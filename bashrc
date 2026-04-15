@@ -10,6 +10,19 @@ alias ..='cd ..'
 alias nv='nvim'
 alias ta='tmux attach'
 alias o2='ssh joj144@o2.hms.harvard.edu'
+alias vw='kitten icat'
+
+# yazi with cwd-on-exit: running `y` instead of `yazi` drops you into
+# whatever directory you navigated to when you quit.
+function y() {
+    local tmp cwd
+    tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
+    yazi "$@" --cwd-file="$tmp"
+    if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+        builtin cd -- "$cwd"
+    fi
+    rm -f -- "$tmp"
+}
 alias claude-local='ANTHROPIC_BASE_URL="http://localhost:11434" ANTHROPIC_API_KEY="ollama" ANTHROPIC_MODEL="qwen2.5-coder:32b-instruct-q4_K_M" command claude'
 
 # --- HISTORY CONFIGURATION ---
@@ -31,6 +44,11 @@ export HISTCONTROL=ignoredups:erasedups
 # We append to the existing PROMPT_COMMAND so we don't break other settings.
 export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
 
+# Strip VTE hook if launched from a VTE terminal (mate-terminal) into a non-VTE one (kitty)
+if ! declare -F __vte_prompt_command >/dev/null 2>&1; then
+    PROMPT_COMMAND=${PROMPT_COMMAND//__vte_prompt_command/}
+fi
+
 # 5. Vim-style history navigation (Ctrl+K = up, Ctrl+J = down)
 if [[ $- == *i* ]]; then
     bind '"\C-k": previous-history'
@@ -47,6 +65,8 @@ export LC_ALL=$LANG
 
 export VSCODE_SERVER_DIR=$HOME/.vscode-server
 export TMUX_TMPDIR=/tmp
+export EDITOR=nvim
+export VISUAL=nvim
 
 # PATH
 export PATH=$HOME/bin:$PATH
@@ -58,6 +78,9 @@ export PATH=$HOME/.local/bin:$PATH
 export LD_LIBRARY_PATH=$HOME/.local/lib/ollama:$LD_LIBRARY_PATH
 
 export UV_INDEX_STRATEGY=first-index
+
+# API keys (file is chmod 600)
+[[ -f ~/.api_keys ]] && source ~/.api_keys
 
 sc() { scancel "$@"; }
 _sc_completions() {
