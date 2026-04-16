@@ -232,4 +232,4 @@ export SDKMAN_DIR="$HOME/.sdkman"
 
 # Source machine-specific config if it exists
 [[ -f ~/.bashrc.local ]] && source ~/.bashrc.local
-. "$HOME/.cargo/env"
+[[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
