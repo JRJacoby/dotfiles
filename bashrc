@@ -11,6 +11,7 @@ alias nv='nvim'
 alias ta='tmux attach'
 alias o2='ssh joj144@o2.hms.harvard.edu'
 alias vw='kitten icat'
+alias obs='nohup /n/groups/datta/john/apps/obsidian >/dev/null 2>&1 & disown'
 
 # yazi with cwd-on-exit: running `y` instead of `yazi` drops you into
 # whatever directory you navigated to when you quit.

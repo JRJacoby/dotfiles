@@ -107,9 +107,11 @@ sbatch <<'SBATCH_EOF'
 
 cd /path/to/project
 
-claude -p "Read /path/to/context-file.md for full context. You are continuing a [job description]. [Specific instructions for what to check, restart, and monitor]. If YOUR slurm job is running low on time (less than 40 min remaining), launch another continuation job using the sbatch script in the context file."
+claude -p --dangerously-skip-permissions "Read /path/to/context-file.md for full context. You are continuing a [job description]. [Specific instructions for what to check, restart, and monitor]. If YOUR slurm job is running low on time (less than 40 min remaining), launch another continuation job using the sbatch script in the context file."
 SBATCH_EOF
 ```
+
+> **🚨 CRITICAL: `--dangerously-skip-permissions` is REQUIRED.** Without it, the continuation Claude will prompt for permission on every tool call — but there's no human sitting there to approve them, so the session just hangs and accomplishes nothing. The whole value of the continuation pattern is unattended execution, which only works when tool calls run non-interactively. This is the #1 cause of silent continuation failure.
 
 **Important sbatch parameters:**
 - Match the resource requirements (GPU, memory, CPUs) of the original job
@@ -152,6 +154,7 @@ Don't wait until < 40 minutes to submit the continuation job. Submit it early so
 
 ## Checklist Before Launching
 
+- [ ] **`claude -p --dangerously-skip-permissions` — without this, the continuation hangs on every tool call**
 - [ ] Context file written to persistent storage (not /tmp)
 - [ ] Context file includes ALL details: paths, IDs, commands, sbatch script
 - [ ] Context file progress section is up to date

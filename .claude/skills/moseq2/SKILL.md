@@ -305,6 +305,16 @@ moseq2_app/
 | **GPU** | Not required | JAX with optional GPU |
 | **Python** | 3.6-3.7 (legacy) | 3.10 |
 
+## Important: Transition Matrices Are Always Bout-Level
+
+When computing syllable transition matrices, always use **bout-to-bout transitions** — i.e., one count per syllable-change event. **Self-transitions do not exist by construction**; the diagonal is always zero.
+
+The frame-level alternative (counting every (label[t], label[t+1]) pair, including label[t] == label[t+1]) is wrong for this purpose: with sub-second to multi-second syllable durations and 30 fps recording, a large fraction of frame-level transitions are self-loops, and the off-diagonal pattern that carries the behavioral grammar gets drowned in self-transitions.
+
+**Practical recipe:** convert each per-frame label sequence to a per-bout label sequence first (collapse runs to a single label per run), then count consecutive (bout[i], bout[i+1]) pairs into the transition matrix. Equivalently: take a frame-level transition matrix and zero out the diagonal — you get the same off-diagonal counts. Row-normalize after zeroing the diagonal so each row is a valid distribution over the next syllable given that a syllable change occurred.
+
+This rule applies whether you are comparing groups, building heatmaps, or feeding transition matrices into any downstream analysis.
+
 ## Important: Per-Frame vs Per-Bout Frequency
 
 When computing syllable frequencies, **always ask the user whether they want per-frame or per-bout frequencies** before defaulting to either. The two metrics answer different questions:

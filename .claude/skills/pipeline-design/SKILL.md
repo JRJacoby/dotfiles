@@ -256,21 +256,37 @@ Log when a step starts, when it skips (outputs fresh), and when items within a l
 
 Steps create their own output directories as needed (`makedirs(exist_ok=True)`). Do not require directories to exist beforehand.
 
-## Plot Sidecar Files
+## Plot Outputs
 
-Any time a plot compares groups (genotypes, conditions, etc.), it must have a **sidecar file** saved alongside it containing the statistical details for every comparison. The sidecar file shares the plot's basename with a `_stats.json` suffix.
+Every plot writes three artifacts side by side, sharing the plot's basename:
 
 ```
 plots/
-  state_frequencies_by_genotype.png
+  state_frequencies_by_genotype.pdf
   state_frequencies_by_genotype_stats.json
+  state_frequencies_by_genotype_data.csv
 ```
 
-The sidecar file is structured JSON containing:
-- All pairwise comparisons with test statistic, raw p-value, corrected p-value, and significance flag
-- The statistical test used and any correction method
-- Sample sizes per group
-- Summary statistics (means, medians, CIs) per group
+All three are tracked by the freshness check — deleting any one triggers a rebuild — and are written atomically (per the atomic-write rule above).
+
+### File format
+
+Plots are saved as **PDF** (vector). PDF preserves text, line widths, and colors at any zoom and is the assumed input for downstream editing (Illustrator, Figma, etc.); a rasterized format alone loses that.
+
+### Stats sidecar (`_stats.json`)
+
+The stats sidecar captures the numerical content the plot depicts in machine-readable form. The intent: anything one might want to ask about the plot later — exact mean, CI, sample size, fitted parameter, threshold, boundary, p-value — should be readable from the sidecar without re-running the pipeline or eyeballing the figure. At minimum it should capture every quantity the plot actually visualizes, plus the sample sizes underlying each summary statistic.
+
+What goes in depends on the plot type:
+
+#### Group-comparison plots
+
+For plots that compare groups (e.g., bar charts with multiple categories), include:
+
+- All pairwise comparisons with test statistic, raw p-value, corrected p-value (if any correction was applied), and significance flag.
+- The statistical test used and the correction method.
+- Sample sizes per group.
+- Summary statistics (means, medians, CIs) per group.
 
 ```json
 {
@@ -293,7 +309,83 @@ The sidecar file is structured JSON containing:
 }
 ```
 
-This ensures all statistical results are machine-readable and reproducible, not just visually indicated on the plot.
+#### Diagnostic / model-fit plots
+
+For plots showing a fitted model, distribution, or threshold (no comparison being made), include:
+
+- The fitted parameters (e.g., per-component means / variances / weights for a mixture model, regression coefficients for a fit line, kernel bandwidth for a KDE).
+- Any thresholds or boundaries drawn on the plot, with their numeric values.
+- Sample size and basic summary statistics of the input data (n, mean, std, percentiles).
+
+```json
+{
+  "n_input": 247,
+  "input_summary": {"mean": 12.4, "std": 5.1, "min": 1.0, "max": 38.7},
+  "model": {
+    "name": "GaussianMixture",
+    "n_components": 2,
+    "components": [
+      {"label": "Slow", "mean": 7.8, "std": 2.1, "weight": 0.62},
+      {"label": "Fast", "mean": 18.5, "std": 3.4, "weight": 0.38}
+    ]
+  },
+  "boundary": {"value": 13.15, "rule": "midpoint of component means"}
+}
+```
+
+#### Single-series plots (histograms, time series)
+
+For plots with no model fit and no group comparison, the sidecar still records:
+
+- Sample size.
+- Bin edges + counts (for histograms) or summary statistics (mean, std, percentiles) for the series.
+- Any reference lines, thresholds, or annotations and their numeric values.
+
+### Data CSV (`_data.csv`)
+
+Alongside the stats sidecar, every plot writes a CSV with **one row per data point that drove the plot**, at the natural input-level granularity. Pick the level by what the plot shows:
+
+- **Bar / box / violin chart of group summaries**: rows are per-(individual, group) values — the inputs to the per-group aggregate, not the aggregate itself.
+- **Scatter or line plot**: rows are the (x, y) pairs that get plotted, plus any grouping column.
+- **Histogram or density**: rows are the individual values being binned.
+- **Diagnostic plot fit to a population**: rows are the input population (one per subject/event/whatever the population element is), plus any per-row label or assignment derived in the step (e.g., the cluster the row was assigned to).
+
+The intent: a collaborator with the CSV alone can run independent analyses, regenerate the plot in another tool, or sanity-check the aggregation chain.
+
+**Exception — very high-sample-size data**. When the natural per-row level is something like per-frame across hours of video, per-pixel of an image stack, or any case where the CSV would be hundreds of MB or more, write the next-coarser meaningful aggregation instead (e.g., per-bout, per-subject) and document the chosen level in the step's docstring. Don't write multi-GB CSVs that no one can open.
+
+These conventions ensure every figure is reproducible, queryable from text alone, and editable downstream without re-running anything.
+
+## Data Provenance
+
+Every data artifact a step writes — CSV, HDF5, plot sidecar, array dump, anything — carries its own provenance, embedded as close to the data as the format allows. A data file copied away from the pipeline should still answer on its own: what produced it, from what inputs, with what parameters, when, and at what code version. (This is about data outputs; scripts don't carry it, their outputs do.)
+
+Record, for every output artifact:
+
+- **Script** — the module/entrypoint that wrote the file.
+- **Inputs** — every input consumed, as `path` + `size` + `mtime`, plus a content hash for small or critical inputs. Full-hashing large files is too expensive; size+mtime is the cheap staleness proxy, a hash is worth it where correctness hinges on the exact bytes.
+- **Parameters** — the config/params in effect at production time, serialized (e.g. JSON of the config object or the parsed CLI args).
+- **Created-at** — ISO-8601 datetime with timezone.
+- **Git** — the commit SHA at run time, **and a dirty flag** for uncommitted changes. A SHA is meaningless if the working tree was dirty, so always record both.
+- **Environment** — the interpreter/venv and the versions of the libraries the result actually depends on.
+- **Invocation** — the exact command line / argv.
+
+Embed it as close to the data as the format allows:
+
+- **CSV** — leading comment lines before the header row (`# key: value`, or one `# provenance: {json}` line).
+- **HDF5** — a top-level `/provenance` group (fields as scalar datasets or group attrs); dataset-specific provenance as attrs on that dataset.
+- **Plots** — a `provenance` block inside the `_stats.json` sidecar.
+- **Parquet** — the schema's key-value metadata.
+- **npy / npz** — a sibling `<name>.prov.json` (or a `provenance` entry inside the npz).
+
+For **any other output format, devise the analogous "embed it as closely as possible" strategy** — a native metadata slot if the format has one, otherwise a sibling `<name>.prov.json`. Every data artifact gets provenance; no format is exempt.
+
+Conventions:
+
+- Build the common record (git SHA + dirty, datetime, script, invocation, environment) once in a shared helper; thin per-format writers embed it. Don't hand-roll provenance in each step.
+- Write provenance **atomically with the output** (same tmp→rename), so no artifact ever exists without it.
+- On skip-if-fresh reuse, **keep the existing provenance** — it describes the real production run; don't overwrite it with a no-op re-stamp.
+- Provenance is descriptive metadata, **never load-bearing** — pipeline logic must not depend on reading it back.
 
 ## HDF5 Performance
 

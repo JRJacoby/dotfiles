@@ -6,4 +6,11 @@
 [mgr]
 prepend_keymap = [
     { on = "d", run = "remove --permanently", desc = "Delete permanently (trash unavailable on NFS)" },
+    { on = ["<C-o>"], run = 'shell "caja %d &" --orphan', desc = "Open current dir in caja" },
+    # <Enter>: directory -> caja (detached); any file -> yazi's own opener, so the
+    # [open] rules in yazi.toml apply and files route by mimetype (text -> $EDITOR/nvim,
+    # pdf/image -> gio open -> browser, video -> ffplay). `ya emit open --hovered`
+    # hands the hovered file back to yazi rather than forcing one app for everything.
+    # Directory navigation is unaffected: l / <Right> still enter dirs in yazi.
+    { on = "<Enter>", run = 'shell --orphan -- if [ -d "%h" ]; then setsid -f caja "%h" >/dev/null 2>&1; else ya emit open --hovered; fi', desc = "File -> default opener (by mimetype), dir -> caja" },
 ]

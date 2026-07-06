@@ -50,13 +50,31 @@ for each frame:
 ```python
 import cv2, subprocess
 
-up = H * UPSCALE  # typically UPSCALE = 3
-idx_up = cv2.resize(idx, (up, up), interpolation=cv2.INTER_NEAREST)
-frame_rgb = lut[idx_up]  # (up, up, 3) uint8 via LUT indexing
+# Adaptive upscale: target smallest dimension == 600 px (fractional scale OK).
+# Output stays readable on typical monitors without ffmpeg cost growing
+# needlessly. If the source is already >= 600 on its smallest side, skip the
+# resize entirely. libx264 also requires even W and H, so round up to even.
+TARGET_MIN_DIM = 600
+scale = max(1.0, TARGET_MIN_DIM / min(H, W))
+up_h = ((round(H * scale) + 1) // 2) * 2
+up_w = ((round(W * scale) + 1) // 2) * 2
+
+if scale == 1.0 and (H % 2 == 0) and (W % 2 == 0):
+    idx_up = idx
+else:
+    idx_up = cv2.resize(idx, (up_w, up_h), interpolation=cv2.INTER_LINEAR)
+frame_rgb = lut[idx_up]  # (up_h, up_w, 3) uint8 via LUT indexing
 proc.stdin.write(frame_rgb.tobytes())
 ```
 
-**Why nearest-neighbor**: preserves pixel-level detail without interpolation blur. At 3× the individual depth pixels are visible, which is useful for QA (you can see mask edges, noise, artifacts).
+**Why bilinear (INTER_LINEAR)**: depth surfaces (animal bodies, objects, floor) are smooth, so bilinear gives a visually natural upscale at any fractional scale. With nearest-neighbor at non-integer scales, some source pixels duplicate into N+1 output pixels and others into N — a "wobbly grid" pattern that's invisible at small scales (1.04× from 576) but distracting at large scales (7.5× from 80×80). Bilinear removes the pattern entirely.
+
+**When to override to INTER_NEAREST**: only if you're inspecting *pixel-level* artifacts (mask boundary correctness, single-pixel noise, single-frame anomalies). For those, the source pixel grid is the data you want to see, and bilinear blur destroys it. For everything else (general QA, draw-bboxes-on-this, "show me the recording"), bilinear is the better default.
+
+**Why target 600 px on the smallest side**: 600 px is comfortable for human review on most monitors without ffmpeg encoding cost and file size growing needlessly. Examples:
+- 640×576 raw Azure Kinect depth → smallest dim 576 → scale 1.042× → 667×600.
+- 80×80 size-normed → smallest dim 80 → scale 7.5× → 600×600.
+- 1920×1080 already-large render → smallest dim 1080 → scale 1.0× (no resize).
 
 ### Full ffmpeg invocation
 
@@ -65,10 +83,11 @@ proc = subprocess.Popen(
     [
         "ffmpeg", "-y",
         "-f", "rawvideo", "-vcodec", "rawvideo",
-        "-s", f"{up}x{up}", "-r", str(fps),
+        "-s", f"{up_w}x{up_h}", "-r", str(fps),
         "-pix_fmt", "rgb24", "-i", "-",
         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
         "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
         str(out_path),
     ],
     stdin=subprocess.PIPE,
@@ -76,14 +95,14 @@ proc = subprocess.Popen(
 )
 ```
 
-`-crf 23` is a good default for QA videos — visually lossless at reasonable file sizes. Drop to 18 for publication-quality, raise to 28 for smaller files.
+`-crf 23` is a good default for QA videos — visually lossless at reasonable file sizes. Drop to 18 for publication-quality, raise to 28 for smaller files. `+faststart` moves the moov atom to the front of the file at encode-finish so browsers can stream and seek without downloading the whole file first.
 
 ### Typical parameters
 
 | Parameter | Default | Notes |
 |---|---|---|
 | FPS | 30 | Matches Azure Kinect depth frame rate |
-| UPSCALE | 3 | 3× nearest-neighbor. Use 1 for native resolution |
+| Upscale target | smallest dim >= 600 px | `upscale = max(1, ceil(600 / min(H, W)))`; nearest-neighbor; no resize if already >=600 |
 | Percentile sampling | 200 frames | Enough for stable estimates, avoids loading full dataset |
 | CRF | 23 | Good QA quality. Lower = better quality, bigger file |
 | Colormap | cubehelix | Project standard. Don't change without reason |

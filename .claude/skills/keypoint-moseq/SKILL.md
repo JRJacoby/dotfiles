@@ -319,6 +319,14 @@ If syllables are too short/long, adjust `kappa` (stickiness) in config.
 - Use `ar_only=True` for fast iteration
 - Reduce data size for prototyping
 
+## Reading jax-moseq source
+
+Most of keypoint-moseq's heavy lifting (Gibbs resampling, AR-HMM smoothing, Kalman message passing, the keypoint-SLDS and allo-keypoint-SLDS models) lives in **jax-moseq**, not keypoint-moseq itself. When tracing into `jax_moseq.models.keypoint_slds`, `jax_moseq.models.arhmm`, `jax_moseq.models.allo_keypoint_slds`, or `jax_moseq.utils`, read the source from John's local checkout:
+
+`/home/joj144/projects/keypoint-moseq/jax-moseq`
+
+Use this in preference to fetching from GitHub or hunting through an installed site-packages copy — it's the version actively under development and is what `keypoint_moseq/fitting.py` is calling into.
+
 ## Important Gotchas
 
 ### Always use Python 3.10
@@ -631,6 +639,16 @@ else:
     state["arhmm"]["model_name"] = model_name  # Save checkpoint name
     save_kappa_state(state)
 ```
+
+## Important: Transition Matrices Are Always Bout-Level
+
+When computing syllable transition matrices, always use **bout-to-bout transitions** — i.e., one count per syllable-change event. **Self-transitions do not exist by construction**; the diagonal is always zero.
+
+The frame-level alternative (counting every (label[t], label[t+1]) pair, including label[t] == label[t+1]) is wrong for this purpose: with sub-second to multi-second syllable durations and 30 fps recording, a large fraction of frame-level transitions are self-loops, and the off-diagonal pattern that carries the behavioral grammar gets drowned in self-transitions.
+
+**Practical recipe:** convert each per-frame label sequence to a per-bout label sequence first (collapse runs to a single label per run), then count consecutive (bout[i], bout[i+1]) pairs into the transition matrix. Equivalently: take a frame-level transition matrix and zero out the diagonal — you get the same off-diagonal counts. Row-normalize after zeroing the diagonal so each row is a valid distribution over the next syllable given that a syllable change occurred.
+
+This rule applies whether you are comparing groups, building heatmaps, or feeding transition matrices into any downstream analysis.
 
 ## Important: Per-Frame vs Per-Bout Frequency
 

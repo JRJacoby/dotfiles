@@ -115,7 +115,7 @@ hypparams = {
 | `sm.compare_states(states1, states2, n_states)` | Hungarian-aligned confusion matrix + accuracy |
 | `get_adjusted_rand(states_dict1, states_dict2, downsample=10)` | Adjusted Rand index between two models |
 | `sm.lagged_mutual_information(sequences, mask, lags)` | Returns `(real_mi, markov_mi, shuff_mi)` |
-| `count_transitions(states, mask, n_states)` | State-to-state transition counts |
+| `count_transitions(states, mask, n_states)` | Frame-level transition counts (includes self-loops; see "Transition matrices" rule below) |
 | `sample_instances(states_dict, num_instances)` | Random instances of each state: `{state: [(key, start, end), ...]}` |
 
 #### Visualization
@@ -250,11 +250,43 @@ Each fitted model produces two pickle files:
 
 ### 1. Lagged Mutual Information (motivating diagnostic)
 
-Compute MI at multiple lags to verify hierarchical structure exists and identify the target state duration timescale. See `shmoseq_utils.compute_and_plot_lagged_mi()`.
+Compute MI at multiple lags to verify hierarchical structure exists and identify the target state-duration timescale. Real syllable data carries more information about its future at long lags than an equivalent first-order Markov chain; the lag where the **real** curve separates from the **Markov** curve before both decay to the shuffle floor is the timescale shMoSeq states should fall in — the anchor for picking kappa off the duration-vs-kappa panel. CPU-only; no GPU/SLURM needed.
+
+Canonical computation + plot (from the state-moseq `example_data_tutorial`):
+
+```python
+import jax.numpy as jnp
+import numpy as np
+import matplotlib.pyplot as plt
+import state_moseq as sm
+
+num_lags = 40
+min_lag, max_lag = fps, fps * 300          # 1 s .. 300 s
+lags = jnp.logspace(jnp.log10(min_lag), jnp.log10(max_lag), num_lags).astype(int)
+
+seqs, mask, metadata = sm.batch(syllables_dict)
+seqs, mask = jnp.array(seqs), jnp.array(mask)   # MUST be jax arrays (see gotchas)
+real_mis, markov_mis, shuff_mis = sm.lagged_mutual_information(seqs, mask, lags)
+
+for mis, label, color in zip([real_mis, markov_mis, shuff_mis],
+                             ["real", "Markov", "shuffle"], ["red", "black", "gray"]):
+    mean = mis.mean(0)                          # returns are (n_sequences, n_lags)
+    err = mis.std(0) / np.sqrt(len(mis)) * 2
+    plt.plot(lags / fps, mean, c=color, label=label)
+    plt.fill_between(lags / fps, mean - err, mean + err, facecolor=color, alpha=0.3)
+plt.xscale("log"); plt.yscale("log")           # log-log: a modest separation is invisible on a linear y-axis
+plt.xlabel("lag (seconds)"); plt.ylabel("mutual information"); plt.legend()
+```
+
+**Gotchas (these have bitten us repeatedly):**
+- `sequences`/`mask` **must be jax arrays** (`jnp.array(...)`). The function uses `mask.at[:, :lag].set(0)`; a NumPy array raises `AttributeError: 'numpy.ndarray' object has no attribute 'at'`.
+- The three returns are **per-sequence**, shape `(n_sequences, n_lags)` — not a single curve. Reduce with `.mean(0)` (and `.std(0)/sqrt(n)` for an error band) before plotting, or you'll draw one line per recording.
+- **Plot log-log.** On a linear y-axis a real-but-modest real-vs-Markov gap looks like the curves overlap. The separation often only reads clearly with `yscale("log")`.
+- A **weak/absent** separation is a real result: it means the syllables are near-Markovian and shMoSeq may add little. Report it rather than forcing a kappa choice.
 
 ### 2. Kappa Scan
 
-Fit models across a grid of `kappa` values (e.g., `np.logspace(4, 5, 20)`) with multiple random seeds (3-10) per kappa. Two approaches:
+Fit models across a grid of `kappa` values (default `np.logspace(3, 7, 20)` — 10³ to 10⁷, wide enough that the log-prob curve actually rolls over on both ends rather than peaking at the boundary) with multiple random seeds (3-10) per kappa. Two approaches:
 - **Tutorial/small datasets:** Nested for loop (see tutorial script reference below)
 - **Production/HPC:** submitit SLURM parallelization (see "SLURM Parallelization with submitit" above) -- each (kappa, seed) pair runs as an independent GPU job
 
@@ -327,14 +359,24 @@ Usually left at defaults: `trans_beta=1`, `emission_base_sigma=1`, `emission_bia
 | `generate_grid_movies(states_dict, video_paths_dict, centroids_dict, output_dir, n_states)` | Grid movies for each state |
 | `create_snub_projects(states_dict, video_paths_dict, output_dir, fps)` | SNUB projects per recording |
 
+## Important: Transition Matrices Are Always Bout-Level
+
+When computing transition matrices between states (or between syllables), always use **bout-to-bout transitions** — i.e., one count per state-change event. **Self-transitions do not exist by construction**; the diagonal is always zero.
+
+The frame-level alternative (counting every (state[t], state[t+1]) pair, including state[t] == state[t+1]) is wrong for this purpose: with multi-second bout durations and 30 fps recording, ~99% of frame-level transitions are self-loops, and the off-diagonal pattern that carries the behavioral structure gets drowned in noise.
+
+**Practical recipe:** convert each per-frame state sequence to a per-bout state sequence first (collapse runs to a single label per run), then count consecutive (bout[i], bout[i+1]) pairs into the transition matrix. Equivalently: take the frame-level transition matrix from `count_transitions` and zero out the diagonal — you get the same off-diagonal counts. Row-normalize after zeroing the diagonal so each row is a valid distribution over the next state given that a state change occurred.
+
+This rule applies whether you are comparing genotypes, building heatmaps, or feeding transition matrices into any downstream analysis.
+
 ## Important: Per-Frame vs Per-Bout Frequency
 
-When computing state/syllable frequencies, **always ask the user whether they want per-frame or per-bout (runlength) frequencies** before defaulting to either. The two metrics answer different questions:
+When computing state/syllable frequencies, **always compute both per-frame and per-bout (runlength) frequencies** — do not pick one. The two metrics answer different questions:
 
 - **Per-frame** (`runlength=False`): proportion of total time spent in each state. Answers "how much time does the animal allocate to this state?"
 - **Per-bout** (`runlength=True`): proportion of total state visits (bouts) that are each state. Answers "how often does the animal enter this state?"
 
-These can diverge substantially when states have very different durations. Both should typically be reported in genotype comparison analyses.
+These can diverge substantially when states have very different durations, so reporting both is the default in genotype comparison analyses.
 
 ## Tutorial Script Reference
 
@@ -390,7 +432,7 @@ output_dir = Path("input/path/to/shmoseq_output_dir")
 
 fps = 25           # Frame rate of your recordings
 n_states = 5       # Number of high-level states to fit. Usually we find 3-5.
-kappas = np.logspace(4, 5, 20)  # Kappa values to scan (controls state duration)
+kappas = np.logspace(3, 7, 20)  # Kappa values to scan (controls state duration); span 10^3 to 10^7 so the log-prob curve rolls over on both ends
 random_seeds = np.arange(5)     # Random seeds for each kappa
 
 # Set these after reviewing the kappa scan plot:
