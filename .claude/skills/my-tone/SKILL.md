@@ -81,12 +81,30 @@ The paragraph rules above all apply. The email frame is different:
 
 - **First reply in a thread:** `Hi <first name>,` alone on the first line, a blank line, then the paragraphs.
 - **Every later reply in that thread:** no greeting. The first line is the reply itself, e.g. "Hmm, nope it's not meaningful like that." or "Just noticed that last argument should be **config rather than a plain config."
-- **Every email ends with `Best,` and `John` on two lines.** GitHub and Slack replies never get one.
+- **The first reply in a thread and the email that wraps it up end with `Best,` and `John` on two lines.** Quick replies in the middle of a back-and-forth leave it off. GitHub and Slack replies never get one.
 
 Habits from his sent email:
 
 - Often one to three sentences in total. A one-line correction to something he just sent goes out as its own email.
 - The dash is a spaced hyphen: "Quick question while I'm putting together the parts list - do you know if..."
-- Code goes in as plain lines in the body, followed by one sentence on what to do with it: "Basically, just add those two imports and the functools.partial call before you call estimate syllable marginals."
+- A few lines of code go in as plain lines in the body, followed by one sentence on what to do with it: "Basically, just add those two imports and the functools.partial call before you call estimate syllable marginals." Anything longer is an attached .py file the email points to: "Take the code in the .py file in there and paste it into a cell and run it..."
 - He names an oversight plainly and proposes a quick test before shipping a fix: "That's a real oversight that jitter isn't included in that function, thanks for pointing that out. Before I go fix it and ask you to reinstall keypoint moseq, let's see if that would actually fix the issue here with a small code snippet."
 - Diagnostic asks: "Can you describe more about the NaNs? For instance what's the range of numbers per session you're getting? And do they come in contiguous blocks or randomly scattered?"
+- When Claude did part of the work, he says so: "I was able to get Claude to reproduce the bug on a toy example and I think I see what's going on."
+
+### Emails in a debugging thread
+
+**Found a lead:** a short update that names the clue from their own data in plain terms, says a fix is coming, and gives a rough timeline.
+
+> Ah okay I think I'm onto something. The fact that all those NaN blocks start right at the 10,000 indices (30k, 40k, 50k) and 10,000 being the size of the chunks used in the computation gave me a hint. I was able to get Claude to reproduce the bug on a toy example and I think I see what's going on. Let me work on a fix and get back to you later today / tomorrow. I think this will require releasing a keypoint-moseq patch. Thanks for bringing this to our attention!
+
+**Sending them something to try:** one paragraph. An opener, the steps with the order in caps, one plain sentence on what the change does, and the conditional next step. That is the whole email: side effects, fallback values and what-ifs wait until they come up.
+
+> Alright, let's try this. Take the code in the .py file in there and paste it into a cell and run it AFTER you've imported keypoint_moseq but BEFORE calling kpms.estimate_syllable_marginals. You will have to run this in a fresh notebook where nothing has been run yet. Basically, we're replacing a function with a fixed version so that when you run the estimate syllable marginals, it will call the fixed version. If this works, I'll make it a keypoint-moseq patch.
+
+**It worked:** thanks with some enthusiasm, one plain sentence on what was actually broken, and what happens next.
+
+> Amazing! Thanks for reporting this and being our guinea pig! This code that is broken is owned by a package we depend on rather than us directly, so I will file an issue with them to get this fixed.
+>
+> Best,
+> John
