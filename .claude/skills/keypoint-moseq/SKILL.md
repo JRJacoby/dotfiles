@@ -7,17 +7,45 @@ description: Fit Keypoint-MoSeq models to animal pose tracking data for unsuperv
 
 Keypoint-MoSeq is a machine learning method for unsupervised segmentation of animal behavior from pose tracking data. It identifies discrete behavioral "syllables" and their temporal structure using an autoregressive hidden Markov model (AR-HMM) on pose dynamics.
 
+## The tutorial notebook defines expected usage
+
+`docs/source/modeling.ipynb`, and its Colab twin `docs/keypoint_moseq_colab.ipynb`,
+is the specification of how keypoint-moseq is meant to be run, not a demo. Users
+work through it cell by cell, so every step it contains is part of the expected
+path. Cells marked `[Optional]` in the heading are explicitly skippable, but that
+marking is not exhaustive: noise calibration is an unmarked cell that most users
+skip in practice. Treat unmarked cells as standard usage unless you know otherwise.
+
+Two consequences when reasoning about someone's setup:
+
+- **Defaults in `config.yml` are placeholders, not recommendations.** Several are
+  overwritten by notebook cells that compute a data-dependent value. Reading a
+  default out of `keypoint_moseq/io.py` tells you what a fresh config looks like
+  before the notebook runs, not what a user is actually fitting with.
+- **A step added to the notebook is effectively on by default from that release
+  forward.** To work out whether a given user has it, locate the release that
+  first ships the notebook cell, not just the release that added the underlying
+  function.
+
+When a user's results suggest a hyperparameter is wrong, the first question is
+which release they are on, because that determines which notebook they followed
+and therefore which values were estimated rather than left at a placeholder.
+
 ## Installation
 
-**Important: Always use Python 3.10 for keypoint-moseq projects.** Later
-versions may have compatibility issues with JAX and other dependencies.
+**Python version depends on the keypoint-moseq release.** From 0.7.0,
+keypoint-moseq supports and is tested on Python 3.10 through 3.14, with no
+version pins on its scientific dependencies. Releases before 0.7.0 pin NumPy 1,
+matplotlib 3.8.4 and jax < 0.7, so they need Python 3.10 (3.11 and 3.12 install
+but get pandas 3, which empties the group comparison plot; 3.13 and 3.14 do not
+install).
 
 Use **uv** to create a project-specific virtual environment (not conda -- conda
 is only for depth-moseq / moseq2 projects which use the `moseq2_app` env):
 
 ```bash
-uv init --python 3.10 --bare
-uv add "keypoint-moseq[cuda]"
+uv init --python 3.12 --bare      # any of 3.10-3.14 for keypoint-moseq >= 0.7.0
+uv add "keypoint-moseq[cuda]>=0.7.0"
 ```
 
 The `[cuda]` extra installs JAX with GPU support. This is the preferred
@@ -30,14 +58,15 @@ The standard Keypoint-MoSeq workflow:
 1. **Load keypoints** - Import from SLEAP, DeepLabCut, or other formats
 2. **Project setup** - Create config.yml with bodyparts, skeleton, fps
 3. **Outlier removal** - Identify and interpolate outlier keypoints
-4. **Noise calibration** (optional) - Estimate observation noise from stationary frames
+4. **Noise calibration** (usually skippable) - Learn the relationship between keypoint error and confidence
 5. **Format data** - Batch recordings into segments for model fitting
 6. **Fit PCA** - Reduce dimensionality of pose space
-7. **Initialize model** - Set initial AR-HMM parameters
-8. **Fit AR-HMM** - Fit autoregressive model (fast, ~minutes)
-9. **Fit full model** - Joint fitting with keypoint observations (slow, ~hours)
-10. **Reindex syllables** - Renumber so syllable 0 = most frequent (IMPORTANT!)
-11. **Extract results** - Get syllable labels, centroids, headings
+7. **Estimate hyperparameters** - Set `sigmasq_loc` from the data
+8. **Initialize model** - Set initial AR-HMM parameters
+9. **Fit AR-HMM** - Fit autoregressive model (fast, ~minutes)
+10. **Fit full model** - Joint fitting with keypoint observations (slow, ~hours)
+11. **Reindex syllables** - Renumber so syllable 0 = most frequent (IMPORTANT!)
+12. **Extract results** - Get syllable labels, centroids, headings
 
 ## Key Functions
 
@@ -305,6 +334,19 @@ If syllables are too short/long, adjust `kappa` (stickiness) in config.
 
 ## Common Issues
 
+### latent_dim around 4 is healthy; hitting the ceiling is the warning sign
+
+Selecting `latent_dim` as the number of PCs reaching 90% variance typically
+lands around 4 on clean 2D open-field tracking, where pose variance
+concentrates in the first few components. The `config.yml` default of 10 is a
+placeholder, not a target, and `(num_keypoints - 1) * keypoint_dim` is a hard
+ceiling `init_model` enforces.
+
+Needing close to that ceiling to reach 90% means variance is spread thin
+across components, which usually indicates noisy tracking rather than a
+genuinely high-dimensional pose. Treat a high `latent_dim` as a prompt to
+re-examine the scree plot and the outlier QA, not as a richer model.
+
 ### Too few/many syllables
 - Adjust `num_states` in config (model prunes unused states)
 - Check `kappa` parameter for state switching rate
@@ -327,14 +369,108 @@ Most of keypoint-moseq's heavy lifting (Gibbs resampling, AR-HMM smoothing, Kalm
 
 Use this in preference to fetching from GitHub or hunting through an installed site-packages copy — it's the version actively under development and is what `keypoint_moseq/fitting.py` is calling into.
 
+## Test data
+
+`/n/groups/datta/john/projects/kpms-test-data/`
+
+The standard keypoint-MoSeq tutorial dataset, kept on the shared filesystem so it is
+reachable from any node.
+
+- `open_field_2D/dlc_project/videos/` — 10 DeepLabCut sessions as
+  `*DLC_resnet50_moseq_exampleAug21shuffle1_500000.h5`, each paired with its `.mp4`.
+  Load with `kpms.load_keypoints(path, "deeplabcut")`. The bodyparts are
+  `tail, spine4, spine3, spine2, spine1, head, nose, right ear, left ear`, with
+  `spine4` posterior and `nose` anterior.
+- `open_field_3D/open_field_3D.h5` — the 3D variant.
+- `modeling-for-testing.ipynb` — the tutorial notebook adapted for test runs.
+- `test-results-2D/`, `test-results-2D-full-iter-run/` — outputs from previous runs,
+  useful as a reference for what a healthy fit looks like.
+
+`mktest.sh` stages a scratch copy into a target directory, but its source paths point at
+a `/home/joj144/projects/` location that no longer exists. Copy from the path above
+instead. Note that `/home/joj144/projects` symlinks to
+`/n/groups/datta/john/home_storage/projects`, which is a *different* tree from
+`/n/groups/datta/john/projects`.
+
+## Proving a keypoint-MoSeq fix: small data, full code path
+
+When fixing a bug in keypoint-moseq or jax-moseq, demonstrate it with a **before/after
+run on real data through the real code path**, not with a unit test and not by reasoning
+about the diff. Many bugs in this codebase live in the seams between fitting, saving,
+reloading, and applying, so anything that stubs out part of that chain will miss them.
+Issue #268 and its allocentric twin are both examples: the parameters were correct in
+memory during fitting and only became wrong after a save/reload round trip.
+
+The shape of the run:
+
+1. **Small data, full pipeline.** One session and ~5 iterations is enough. Shrink the
+   data and the iteration count, never the sequence of steps: load → format → PCA →
+   init → fit → save checkpoint → reload → apply.
+2. **Assert on the artifact, not the log.** Read the values back out of
+   `checkpoint.h5` (or the reloaded model dict) and compare arrays directly. Print the
+   actual numbers so the before/after difference is visible and not a matter of trust.
+3. **Run it twice: broken, then fixed.** Capture output from the unfixed code first so
+   the failure is on the record, then apply the fix and rerun the identical script.
+   A fix that was never observed failing has not been demonstrated.
+4. **Confirm the env with John before running,** and confirm whether the local
+   jax-moseq checkout is installed editable into it. A fix to the local checkout that
+   the env does not import will appear to change nothing.
+
+This is a demonstration script, not a test to keep. Write it to the scratchpad.
+
 ## Important Gotchas
 
-### Always use Python 3.10
-Keypoint-moseq and its dependencies (especially JAX and jax-moseq) are tested with Python 3.10. Using newer Python versions (3.11+) can cause compatibility issues, installation failures, or subtle runtime bugs. Always create your environment with Python 3.10:
+### Match the Python version to the keypoint-moseq release
+keypoint-moseq 0.7.0 and later support Python 3.10 through 3.14, and each Python
+version resolves different dependency releases (Python 3.10 gets pandas 2 and an
+older NumPy; 3.11 and later get pandas 3 and NumPy 2.4 or later). A project pinned
+to a release before 0.7.0 needs Python 3.10:
 ```bash
 uv init --python 3.10
 # or in pyproject.toml: requires-python = ">=3.10,<3.11"
 ```
+When picking up an existing project, check which keypoint-moseq version its
+environment has before choosing or changing the Python version.
+
+### sigmasq_loc is a variance in squared pixels per frame
+The centroid prior is `v[t] ~ N(v[t-1], sigmasq_loc * I)` (`location_log_prob` in
+`jax_moseq/models/keypoint_slds/log_prob.py`), so `sigmasq_loc` is the **per-axis
+variance of the centroid's per-frame displacement**, in squared keypoint units. It
+scales with the square of spatial resolution and depends on frame rate, so it is
+not transferable between rigs. The tutorial markdown calls it "the expected
+distance that the centroid will move each frame", which is off by a square.
+
+Set too low, the inferred centroid lags the animal during fast movement. The
+visible symptom is grid movies whose crop and white dot trail the animal on the
+fastest syllables, while the overlaid keypoints sit correctly on the animal.
+
+**Do not sanity-check the estimate against raw frame-to-frame centroid
+displacement.** `estimate_sigmasq_loc` median-filters the centroid over
+`filter_size` frames before differencing, deliberately: a tracked centroid
+carries per-frame keypoint jitter, and differencing a jittery signal
+manufactures movement that is not there, so raw displacement *overstates* how
+fast the animal moves. The filtered estimate is the smaller and the more
+honest number, and a value far below what raw displacement suggests is the
+expected outcome rather than a symptom. On the 2D open-field test data at 30
+fps the estimator returns about 0.8, against 2.4 for the per-axis variance of
+unfiltered displacement — the filter is removing jitter, not signal.
+
+The absolute scale is rig-specific, since it goes as the square of spatial
+resolution. Judge a value by whether the grid movies track the animal, not
+against a remembered number from another rig.
+
+Estimate it from the data rather than picking a number:
+```python
+kpms.update_config(
+    project_dir,
+    sigmasq_loc=kpms.estimate_sigmasq_loc(
+        data["Y"], data["mask"], filter_size=config()["fps"]
+    ),
+)
+```
+`estimate_sigmasq_loc` is available from release 0.6.3 onward. It averages over
+all frames including immobile ones, so it can still run tight for animals that
+are mostly stationary with brief fast bouts.
 
 ### Kappa range can be much higher than typical
 The default kappa is `1e6` and documentation suggests `1e4` to `1e8`, but some datasets require kappa values up to `1e15` or higher to achieve target syllable durations. Don't assume the typical range will work - always tune kappa empirically.
@@ -674,6 +810,32 @@ These can diverge substantially when syllables have very different durations. Bo
 6. **Save checkpoints**: Full model fitting is slow; checkpoints allow resuming.
 
 7. **Grid movies for validation**: The ultimate test is whether syllables look behaviorally meaningful.
+
+## Pushing branches: always name the branch
+
+John's `~/.gitconfig` sets `push.default = matching`, so a bare `git push` pushes
+every local branch that has a same-named branch on GitHub, not just the one checked
+out. The keypoint-moseq and jax-moseq checkouts carry many old feature branches, and a
+bare push will try to update all of them: any that are ahead of GitHub get pushed
+without anyone meaning to, and any that are behind make the push exit nonzero, which
+hides whether the branch you meant actually went up.
+
+Always give the remote and branch explicitly:
+
+```bash
+git push -u origin <branch>   # first push of a new branch
+git push origin <branch>      # every push after that
+```
+
+The same applies to `git commit ... && git push` one-liners and to any script that
+pushes.
+
+## Pull request descriptions: summary only
+
+A pull request description is a `## Summary` of the change, a short bulleted list
+of what it does and why, followed by the attribution footer. Do not add a "Test
+plan" section or checklist; John has not asked for one. When test evidence matters
+to a reviewer, say it in a sentence within the summary.
 
 ## Releasing
 

@@ -204,17 +204,15 @@ unset __mamba_setup
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$("$HOME/miniforge3/bin/conda" 'shell.bash' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
+# Source conda.sh directly instead of eval "$(conda shell.bash hook)". The hook
+# launches Python and imports all of conda (~1300 file opens) on every shell start,
+# which is very slow over NFS home. conda.sh yields byte-identical shell setup with
+# no Python launch. If auto_activate_base is ever enabled, add 'conda activate base'.
+if [ -f "$HOME/miniforge3/etc/profile.d/conda.sh" ]; then
+    . "$HOME/miniforge3/etc/profile.d/conda.sh"
 else
-    if [ -f "$HOME/miniforge3/etc/profile.d/conda.sh" ]; then
-        . "$HOME/miniforge3/etc/profile.d/conda.sh"
-    else
-        export PATH="$HOME/miniforge3/bin:$PATH"
-    fi
+    export PATH="$HOME/miniforge3/bin:$PATH"
 fi
-unset __conda_setup
 # <<< conda initialize <<<
 
 

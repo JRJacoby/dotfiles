@@ -11,6 +11,26 @@ Systematically critique a design or implementation plan. The goal is to catch pr
 
 The user will point you to a plan document (usually in `docs/plans/`). Read it thoroughly, then read any code, data, or config files it references.
 
+## Dispatching this review to a subagent
+
+The review is worth most when it is an independent third-party check, so the reviewer must come to the plan cold. When dispatching a subagent to run this skill, the prompt contains **only** the path to the plan and the instruction to review it against this skill. Nothing else.
+
+Withhold, specifically:
+
+- That this is a second or later review round, or that an earlier reviewer already ran
+- Which sections you think are weak, which you think are fine, or where to focus
+- Your summary of what the plan does, your rationale for its design decisions, or any framing of the problem
+- Prior findings, whether fixed or outstanding
+- Anything that signals a preferred verdict
+
+The reviewer's job is to discover problems on its own, including the ones you did not think to look for. Every steer you add narrows what it can notice, and a reviewer told a previous round happened tends to confirm rather than re-examine. A reviewer that reaches a conclusion you already hold, having been told you hold it, has told you nothing.
+
+If you have already written a guided prompt, discard it and send the bare one.
+
+## Receiving the review
+
+Relay the findings as-is. Do not pre-filter them by whether you agree, and do not implement fixes off the back of a review the user has not read — several findings are usually judgment calls the user wants to make.
+
 ## Critique Checklist
 
 Evaluate the plan against each of these criteria. For each one, either note specific issues or explicitly state "no issues found." Do not skip criteria.

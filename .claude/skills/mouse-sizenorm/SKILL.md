@@ -52,8 +52,22 @@ Two files are needed beyond the package itself:
 | `model.pt` | `/n/groups/datta/win/longtogeny/size_norm/models/freeze_decoder_00/stage_09/7b96ec7e-f894-4391-8c39-f0cb8d7dd516/model.pt` | Pre-trained TorchScript autoencoder. **Always use this model** — it is the current best ("new SNN"). An older model at `bottleneck_optimization_00/stage_06/` exists but over-smooths. |
 | `median_template_poses.npy` | `/n/groups/datta/win/longtogeny/data/median_template_poses.npy` | Reference depth templates for computing a height offset that corrects for camera-to-floor distance variation across rigs. |
 
-A zip of both files is also at:
-`/n/groups/datta/john/projects/evan-schema/resources/2026-03-18_size_normalization/size_norm_resources.zip`
+### Zip for collaborators
+
+`size_norm_resources.zip` (48.6 MB) holds both files at its top level, which is
+what the tutorial script expects when it tells users to unzip next to it. This
+is the file to send when a collaborator asks for the size norm model.
+
+| Location | Path |
+|----------|------|
+| Cluster | `/n/groups/datta/john/projects/evan-schema/resources/2026-03-18_size_normalization/size_norm_resources.zip` |
+| OneDrive (rclone) | `onedrive:size_norm_resources.zip` |
+| OneDrive (web, owner sign-in required) | https://hu-my.sharepoint.com/personal/john_jacoby_hms_harvard_edu/Documents/size_norm_resources.zip |
+| Share link | https://hu-my.sharepoint.com/personal/john_jacoby_hms_harvard_edu/_layouts/15/download.aspx?share=IQAJMVFl8WkOQaowLLiUO1cUAaCv04VAa3v-OsyjAgzCY6Y |
+
+The share link is an anonymous, view-only direct download that anyone with the
+link can use without signing in. Send that link rather than uploading the zip
+again.
 
 ## How It Works
 

@@ -387,6 +387,79 @@ Conventions:
 - On skip-if-fresh reuse, **keep the existing provenance** — it describes the real production run; don't overwrite it with a no-op re-stamp.
 - Provenance is descriptive metadata, **never load-bearing** — pipeline logic must not depend on reading it back.
 
+## Footguns
+
+Failures that produce plausible, correctly-shaped, non-crashing output. Nothing raises, the
+result looks reasonable, and the defect is invisible until something independent is checked
+against it. Each of these has actually shipped.
+
+### `__file__` in a shared helper names the wrong script
+
+A provenance helper that records `__file__` records the module that **defines** it, not the
+one that **calls** it. The moment that helper is imported by scripts in other work units —
+which is the whole point of putting it in a shared module — every artifact those scripts
+write is stamped with the helper's path. The record then points a future reader at a script
+that reads different data by a different method, which is precisely the question provenance
+exists to answer.
+
+Resolve the entry point instead:
+
+```python
+entry = Path(sys.argv[0]).resolve()
+try:
+    script = str(entry.relative_to(PROJECT_ROOT))
+except ValueError:
+    script = str(entry)          # invoked from outside the project tree
+```
+
+The same trap applies to anything else a shared helper infers from its own location: a
+default output directory derived from `Path(__file__).parent`, a work-unit name taken from
+`__file__.parent.name`, a log path, a git root. If a helper needs to know something about
+its caller, take it as an argument or read it from the entry point — never from `__file__`.
+
+Nothing about this fails loudly. The field is populated, well-formed, and wrong.
+
+### A shape or length check is not an alignment check
+
+Asserting that two arrays have the same length says nothing about whether index *i* means
+the same thing in both. Padding upstream routinely makes a misaligned array come out the
+right size — so the assertion passes, the values are all plausible, and every downstream
+result is quietly shifted.
+
+Verify alignment against an **independent signal**, not against a length. Align the two
+series on an event both should agree about, and confirm the agreement lands where it should
+rather than a fixed offset away. A constant offset equal to a model parameter (a lag order,
+a filter width, a window radius) is the signature of this class of bug.
+
+### Freshness inputs must list everything the step reads
+
+A skip-if-fresh check is only as good as its declared inputs. A step that reads a file it
+does not declare will not rebuild when that file changes, and the pipeline will report
+itself up to date while serving stale results. This is easy to get wrong when a step reads
+something indirectly — through a helper, or through a metadata loader that opens a table the
+step never names.
+
+Audit each step by asking what it actually opens, including inside every function it calls,
+and declare all of it. Being covered transitively by another step's inputs is luck, not
+design; it breaks the moment step order changes.
+
+### Panels meant to be compared must share their scale
+
+Two axes drawn from the same data are not comparable unless you make them so.
+
+- **Autoscaled axes.** An axis with no explicit limits fits its own data, so a quiet panel
+  and a busy one both fill their frame and read as equivalent. Share the limits across any
+  set of panels a reader will compare, or the figure invites a conclusion the data does not
+  support.
+- **Image extents.** `imshow` tiles its columns across the extent as cells, so cell
+  *centres* sit at `(i + 0.5) · step`, not `i · step`. For centres to land on true sample
+  positions the extent must run half a cell beyond each end.
+- **Stacked rows over a shared time axis.** Give every row the same number of samples over
+  an identical extent, and set the limits explicitly. Two rows with different sample counts
+  over near-identical extents occupy the same physical width with different data limits, so
+  they drift apart along the panel — perfectly aligned at one edge and off by a sample at
+  the other, which reads as real structure.
+
 ## HDF5 Performance
 
 Never use compression (`compression="gzip"`, etc.) on HDF5 datasets. Disk space is cheap; compression adds significant CPU overhead on both writes and reads, often dominating pipeline runtime. Always create datasets with no compression:

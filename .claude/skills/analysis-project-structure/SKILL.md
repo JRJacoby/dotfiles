@@ -18,7 +18,8 @@ uv init --python 3.10 --bare  # --bare avoids creating unnecessary main.py and R
 ```
 
 Pin the Python version in `pyproject.toml` as appropriate for the project's
-dependencies (e.g., `requires-python = ">=3.10,<3.11"` for keypoint-moseq).
+dependencies (e.g., `requires-python = ">=3.10,<3.11"` for keypoint-moseq releases
+before 0.7.0; 0.7.0 and later support 3.10 through 3.14).
 
 ## Top-Level Layout
 

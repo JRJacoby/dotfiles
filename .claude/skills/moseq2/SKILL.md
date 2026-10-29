@@ -1,6 +1,6 @@
 ---
 name: moseq2
-description: Work with the MoSeq2 depth-video behavioral segmentation pipeline. Use when dealing with depth camera recordings, 3D mouse tracking, AR-HMM modeling, or any of the moseq2-* packages.
+description: Work with the MoSeq2 depth-video behavioral segmentation pipeline. Use when dealing with depth camera recordings, 3D mouse tracking, AR-HMM modeling, or any of the moseq2-* packages. Also covers depth camera acquisition rigs — Kinect v2, Azure Kinect and Orbbec Femto Mega setup, camera mounting height, and debugging failed or dropped-frame recordings.
 ---
 
 # MoSeq2
@@ -24,7 +24,7 @@ All repositories live under `/home/joj144/projects/keypoint-moseq/`:
 ## Pipeline Overview
 
 ```
-Raw Depth Video (.dat/.avi/.mkv)
+   [acquisition]    ──>  Raw Depth Video (.dat/.avi/.mkv)
         |
         v
   [moseq2-extract]  ──>  Extracted frames + scalars (HDF5)
@@ -41,6 +41,36 @@ Raw Depth Video (.dat/.avi/.mkv)
         v
     [moseq2-app]    ──>  Interactive Jupyter exploration
 ```
+
+## Acquisition
+
+Upstream of the five packages, and a separate stack: camera choice fixes both the
+acquisition software and the operating system.
+
+| Camera | Software | OS | Depth computed on |
+|---|---|---|---|
+| Kinect v2 | `dattalab/kinect2-nidaq` | Windows | Host GPU (DirectX 11) |
+| Azure Kinect DK | `dattalab/azure-acquire` | Ubuntu 18.04 | Host GPU |
+| Orbbec Femto Mega | `dattalab/orbbec-acquire` | Ubuntu 22.04 | On-camera |
+
+Published mounting heights, camera face to arena floor: **Kinect v2 673 ± 5 mm (26.5 in)**,
+**Azure Kinect and Femto Mega 596 ± 5 mm (23.5 in)**, in a 17 in diameter arena.
+
+**Debugging an acquisition failure starts with a vendor tool that contains none of the
+lab's code** — Kinect Configuration Verifier (Kinect v2), `k4aviewer` (Azure),
+OrbbecViewer (Femto). If the vendor tool fails the same way, no MoSeq setting can help.
+The second axis is whether the depth file grows on disk: 0 bytes means initialization
+failure, growth means throughput. `kinect2-nidaq`'s own status indicators are
+false-healthy during a stall — only the on-disk file size is trustworthy.
+
+Nothing in the analysis pipeline assumes a camera height: `true_depth` and
+`bg_roi_depth_range` are measured per session. Apparent pixel size does change, which
+affects `crop_size` and `moseq2-pca`'s pixel-domain filters.
+
+See [acquisition-debugging.md](acquisition-debugging.md) for the full reference: rig
+geometry and minimum-range physics, the vendor-tool table and Configuration Verifier row
+readings, USB host-controller requirements and the isochronous bandwidth reservation, data
+rates and storage sizing, and errata in the published lab documentation.
 
 ## Common Infrastructure
 
